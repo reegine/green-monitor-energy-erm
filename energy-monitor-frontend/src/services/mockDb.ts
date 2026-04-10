@@ -1,0 +1,318 @@
+export type Severity = "info" | "warning" | "critical";
+
+export const mockDb = {
+  user: {
+    email: "noel@admin.com",
+    name: "Facility Manager",
+    buildingName: "CSL Building",
+  },
+
+  dashboard: {
+    headerDateText: "Sunday, February 1, 2026",
+    kpis: {
+      currentPowerUsage: { value: 634, unit: "kWh" },
+      todaysConsumption: { value: 8456, unit: "kWh", deltaText: "↑ 12% vs last month", deltaTone: "up" as const },
+      carbonEmissions: { value: 4.2, unit: "tons CO₂", deltaText: "↓ 8% vs last month", deltaTone: "down" as const },
+    },
+    realtimeSeries: [
+      { time: "00:00", value: 260 },
+      { time: "02:00", value: 210 },
+      { time: "04:00", value: 180 },
+      { time: "06:00", value: 290 },
+      { time: "08:00", value: 420 },
+      { time: "10:00", value: 580 },
+      { time: "12:00", value: 610 },
+      { time: "14:00", value: 590 },
+      { time: "16:00", value: 640 },
+      { time: "18:00", value: 510 },
+      { time: "20:00", value: 440 },
+      { time: "22:00", value: 380 },
+    ],
+    alertsPreview: [
+      {
+        title: "High Energy Usage Detected",
+        subtitle: "Floor 3 Lab consuming 23% above average",
+        timeAgo: "10 minutes ago",
+        severity: "warning" as Severity,
+      },
+      {
+        title: "Threshold Exceeded",
+        subtitle: "Monthly usage at 92% of allocated budget",
+        timeAgo: "2 hours ago",
+        severity: "critical" as Severity,
+      },
+      {
+        title: "System Optimization",
+        subtitle: "HVAC efficiency improved by 5% this week",
+        timeAgo: "3 hours ago",
+        severity: "info" as Severity,
+      },
+    ],
+    monthUsage: {
+      totalConsumptionLabel: "Total Consumption",
+      totalConsumptionValue: "234,567 kWh",
+      budgetUsageLabel: "Budget Usage",
+      budgetPercent: 92,
+    },
+    peakHours: {
+      peakTime: "16:00",
+      peakUsage: "634 kWh",
+      average: "423 kWh",
+    },
+  },
+
+  forecast: {
+    headerDateText: "Sunday, February 1, 2026",
+    insightCards: [
+      { title: "Peak Usage Prediction", subtitle: "Expected peak usage on Feb 9 at 16:00 with 13,670 kWh", tone: "blue" as const },
+      { title: "Anomaly Detection", subtitle: "Floor 3 computer Lab showing 35% higher usage than predicted", tone: "orange" as const },
+      { title: "Energy Optimization", subtitle: "Potential 12% savings by adjusting HVAC schedule", tone: "purple" as const },
+      { title: "Model Accuracy", subtitle: "Current prediction accuracy: 94.2% (7-day rolling average)", tone: "indigo" as const },
+    ],
+    forecastSeries: [
+      { day: "Feb 1", actual: 13200, predicted: 13500 },
+      { day: "Feb 2", actual: 13150, predicted: 13450 },
+      { day: "Feb 3", actual: 13600, predicted: 13780 },
+      { day: "Feb 4", actual: 13350, predicted: 13420 },
+      { day: "Feb 5", actual: 13820, predicted: 13900 },
+      { day: "Feb 6", actual: 10300, predicted: 10150 },
+      { day: "Feb 7", actual: 10150, predicted: 10020 },
+      { day: "Feb 8", actual: 13400, predicted: 13320 },
+      { day: "Feb 9", actual: 13900, predicted: 13880 },
+      { day: "Feb 10", actual: 13250, predicted: 13180 },
+    ],
+    anomalySeries: [
+      { time: "08:00", value: 450 },
+      { time: "10:00", value: 560 },
+      { time: "12:00", value: 610 },
+      { time: "14:00", value: 590 },
+      { time: "16:00", value: 640 },
+      { time: "18:00", value: 500 },
+    ],
+    trends: [
+      { title: "Weekly Trend", subtitle: "Consumption decreased compared to previous week", delta: "↓ 3.2%", tone: "down" as const },
+      { title: "Monthly Trend", subtitle: "Significant improvement in energy efficiency", delta: "↓ 5.8%", tone: "down" as const },
+      { title: "Seasonal Pattern", subtitle: "Following expected summer consumption pattern", delta: "Normal", tone: "neutral" as const },
+    ],
+    recommendations: [
+      { title: "Optimize HVAC Schedule", subtitle: "Adjust air conditioning to start 30 minutes later on weekdays", saving: "Est. savings: 840 kWh/month" },
+      { title: "Lighting Optimization", subtitle: "Install motion sensors in low-traffic corridors", saving: "Est. savings: 560 kWh/month" },
+      { title: "Peak Load Management", subtitle: "Shift lab equipment usage to off-peak hours", saving: "Est. savings: $1,240/month" },
+      { title: "Equipment Maintenance", subtitle: "Schedule maintenance for aging units on Floor 3", saving: "Est. savings: 320 kWh/month" },
+    ],
+  },
+
+  carbon: {
+    headerDateText: "Sunday, February 1, 2026",
+    kpis: [
+      { title: "Current Month Emissions", value: "9.2", unit: "tons CO₂", delta: "↓ 6.1% vs last month", iconTone: "blue" as const },
+      { title: "YTD Emissions", value: "62.8", unit: "tons CO₂", delta: "↓ 18.5% vs target", iconTone: "purple" as const },
+      { title: "Trees Equivalent", value: "148", unit: "trees", delta: "Carbon offset needed", iconTone: "green" as const },
+      { title: "Cars Removed", value: "2.3", unit: "annually", delta: "Equivalent impact", iconTone: "pink" as const },
+    ],
+    trend: [
+      { month: "Aug", actual: 12.2, target: 11.4 },
+      { month: "Sep", actual: 11.8, target: 11.0 },
+      { month: "Oct", actual: 11.4, target: 10.5 },
+      { month: "Nov", actual: 10.8, target: 10.0 },
+      { month: "Dec", actual: 10.2, target: 9.6 },
+      { month: "Jan", actual: 9.2, target: 8.8 },
+    ],
+    sources: [
+      { name: "Electricity (Grid)", value: 46 },
+      { name: "HVAC Systems", value: 22 },
+      { name: "Lighting", value: 16 },
+      { name: "Computing Equipment", value: 10 },
+      { name: "Other", value: 6 },
+    ],
+    achievement: {
+      title: "Sustainability Achievement",
+      subtitle:
+        "Congratulations! CSL Building has achieved a 18.5% reduction in carbon emissions compared to the same period last month. Your efforts are making a significant environmental impact.",
+      stats: [
+        { value: "53.4", unit: "tons CO₂ avoided" },
+        { value: "$74.7K", unit: "Cost savings" },
+        { value: "18.5%", unit: "Efficiency improvement" },
+      ],
+    },
+    recommendations: [
+      {
+        title: "Tree Planting Program",
+        subtitle: "Partner with local organizations to plant trees equivalent to your carbon footprint",
+        footer: "148 trees needed",
+        tone: "purple" as const,
+      },
+      {
+        title: "Renewable Energy Credits",
+        subtitle: "Purchase renewable energy certificates to offset remaining emissions",
+        footer: "9.2 tons CO₂/month",
+        tone: "teal" as const,
+      },
+    ],
+  },
+
+    analytics: {
+    headerDateText: "Sunday, February 1, 2026",
+    kpis: {
+      today: { value: 8456, unit: "kWh", delta: "↑ 12% vs yesterday" },
+      week: { value: 8456, unit: "kWh", delta: "↑ 12% vs last week" },
+      month: { value: 16786, unit: "kWh", delta: "↑ 12% vs last month" },
+    },
+    dailySeries: [
+      { label: "Jan 20", kwh: 12200 },
+      { label: "Jan 21", kwh: 11850 },
+      { label: "Jan 22", kwh: 13680 },
+      { label: "Jan 23", kwh: 12950 },
+      { label: "Jan 24", kwh: 13320 },
+      { label: "Jan 25", kwh: 10120 },
+      { label: "Jan 26", kwh: 9800 },
+      { label: "Jan 27", kwh: 12450 },
+      { label: "Jan 28", kwh: 13120 },
+      { label: "Jan 29", kwh: 12310 },
+      { label: "Jan 30", kwh: 14020 },
+      { label: "Jan 31", kwh: 12840 },
+      { label: "Feb 1", kwh: 13220 },
+    ],
+    weeklySeries: [
+      { label: "Week 1", kwh: 82500 },
+      { label: "Week 2", kwh: 84600 },
+      { label: "Week 3", kwh: 80200 },
+      { label: "Week 4", kwh: 86780 },
+    ],
+    monthlySeries: [
+      { label: "Aug", kwh: 220000 },
+      { label: "Sep", kwh: 234000 },
+      { label: "Oct", kwh: 228500 },
+      { label: "Nov", kwh: 241000 },
+      { label: "Dec", kwh: 236200 },
+      { label: "Jan", kwh: 244800 },
+    ],
+    byRoom: [
+      { room: "Lecture Hall A", kwh: 1250 },
+      { room: "Lecture Hall B", kwh: 1189 },
+      { room: "Computer Lab 1", kwh: 2156 },
+      { room: "Computer Lab 2", kwh: 2034 },
+      { room: "Research Lab", kwh: 1876 },
+      { room: "Library", kwh: 987 },
+      { room: "Admin Offices", kwh: 1432 },
+      { room: "Cafeteria", kwh: 1654 },
+    ],
+    byFloor: [
+      { floor: "Floor 1", kwh: 3500 },
+      { floor: "Floor 2", kwh: 4300 },
+      { floor: "Floor 3", kwh: 5900 },
+      { floor: "Floor 4", kwh: 2500 },
+    ],
+    activity: [
+      { name: "Classrooms", kwh: 4234, color: "#1d4ed8" },
+      { name: "Lobby", kwh: 2876, color: "#d946ef" },
+      { name: "Labs", kwh: 6066, color: "#06b6d4" },
+      { name: "Common Areas", kwh: 2537, color: "#7c3aed" },
+    ],
+    detailedLog: [
+      { location: "Lecture Hall A", kwh: 1245, trend: "+5%" },
+      { location: "Lecture Hall B", kwh: 1189, trend: "+5%" },
+      { location: "Computer Lab 1", kwh: 2156, trend: "+5%" },
+      { location: "Computer Lab 2", kwh: 2034, trend: "+5%" },
+      { location: "Research Lab", kwh: 1876, trend: "+5%" },
+      { location: "Library", kwh: 987, trend: "+5%" },
+      { location: "Admin Offices", kwh: 1432, trend: "+5%" },
+      { location: "Cafeteria", kwh: 1654, trend: "+5%" },
+    ],
+  },
+
+  alerts: {
+    headerDateText: "Sunday, February 1, 2026",
+    summary: {
+      active: 5,
+      critical: 1,
+      warning: 3,
+      resolved: 3,
+    },
+    thresholds: {
+      dailyUsageLimit: "15,000 kWh",
+      peakDemand: "700 kWh",
+      budgetThreshold: "95%",
+      usageSpikeAlert: "20%",
+    },
+    list: [
+      {
+        id: "AL-001",
+        severity: "critical" as const,
+        title: "Critical Energy Threshold Exceeded",
+        tag: "Overconsumption",
+        description:
+          "Monthly energy budget at 98%. Immediate action required to avoid overage charges.",
+        metaLeft: "Building-wide",
+        metaRight: "5 minutes ago",
+        is_resolved: false,
+      },
+      {
+        id: "AL-002",
+        severity: "warning" as const,
+        title: "High Energy Usage - Floor 3 Computer Lab",
+        tag: "Abnormal Usage",
+        description:
+          "Computer Lab 2 consuming 35% above normal levels. Possible equipment malfunction.",
+        metaLeft: "Floor 3, Room 302",
+        metaRight: "15 minutes ago",
+        is_resolved: false,
+      },
+      {
+        id: "AL-003",
+        severity: "warning" as const,
+        title: "Peak Demand Warning",
+        tag: "Peak Load",
+        description:
+          "Approaching peak demand threshold. Consider shifting non-critical loads.",
+        metaLeft: "Building-wide",
+        metaRight: "1 hour ago",
+        is_resolved: false,
+      },
+      {
+        id: "AL-004",
+        severity: "info" as const,
+        title: "HVAC Optimization Opportunity",
+        tag: "Efficiency",
+        description:
+          "Temperature settings can be adjusted for 8% energy savings without comfort impact.",
+        metaLeft: "Floors 2-4",
+        metaRight: "2 hours ago",
+        is_resolved: false,
+      },
+      {
+        id: "AL-005",
+        severity: "warning" as const,
+        title: "Aging Equipment Alert",
+        tag: "Equipment",
+        description:
+          "HVAC Unit #4 showing reduced efficiency. Schedule maintenance recommended.",
+        metaLeft: "Floor 3, Mechanical Room",
+        metaRight: "5 hours ago",
+        is_resolved: false,
+      },
+      {
+        id: "AL-006",
+        severity: "info" as const,
+        title: "Weekly Energy Report Available",
+        tag: "Report",
+        description:
+          "Your weekly energy consumption report is ready for download.",
+        metaLeft: "N/A",
+        metaRight: "1 day ago",
+        is_resolved: true,
+      },
+      {
+        id: "AL-007",
+        severity: "critical" as const,
+        title: "Unusual Consumption Pattern Detected",
+        tag: "Anomaly",
+        description:
+          "AI detected abnormal energy spike during off-hours. Investigating possible cause.",
+        metaLeft: "Floor 2, Research Lab",
+        metaRight: "1 day ago",
+        is_resolved: true,
+      },
+    ],
+  },
+};
