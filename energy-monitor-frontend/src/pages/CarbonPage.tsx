@@ -3,6 +3,7 @@ import { api } from "../services/api";
 import Skeleton from "../components/Skeleton";
 import { Download } from "lucide-react";
 import clsx from "clsx";
+import { downloadCsv } from "../services/analyticsRuntime";
 import {
   Area,
   AreaChart,
@@ -29,7 +30,17 @@ export default function CarbonPage() {
           <div className="text-xs text-slate-500 mt-1">Track and reduce your environmental impact</div>
         </div>
 
-        <button className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-blue-600 text-white px-4 py-2 text-xs font-semibold shadow-lg shadow-blue-200/40 hover:bg-blue-700 transition">
+        <button
+          disabled={!data || data.trend.length === 0}
+          onClick={() => {
+            if (!data) return;
+            downloadCsv(
+              `carbon-report_${new Date().toISOString().slice(0, 10)}.csv`,
+              data.trend.map((row) => ({ month: row.month, actual_tons: row.actual, target_tons: row.target }))
+            );
+          }}
+          className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-blue-600 text-white px-4 py-2 text-xs font-semibold shadow-lg shadow-blue-200/40 hover:bg-blue-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
+        >
           <Download className="h-4 w-4" />
           Download Report
         </button>
@@ -81,6 +92,10 @@ export default function CarbonPage() {
         <div className="mt-4 h-[280px]">
           {isLoading || !data ? (
             <Skeleton className="h-full" />
+          ) : data.trend.length === 0 ? (
+            <div className="h-full grid place-items-center text-xs text-slate-400">
+              No carbon trend data available yet.
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.trend} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
@@ -114,6 +129,10 @@ export default function CarbonPage() {
         <div className="mt-4 h-[220px]">
           {isLoading || !data ? (
             <Skeleton className="h-full" />
+          ) : data.sources.length === 0 ? (
+            <div className="h-full grid place-items-center text-xs text-slate-400">
+              No source breakdown available yet.
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.sources} layout="vertical" margin={{ left: 20, right: 10, top: 10, bottom: 0 }}>
@@ -138,12 +157,18 @@ export default function CarbonPage() {
             <div className="text-xs text-slate-600 mt-2">{data.achievement.subtitle}</div>
 
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-              {data.achievement.stats.map((s, i) => (
-                <div key={i} className="bg-white border border-slate-200 rounded-2xl p-4">
-                  <div className="text-lg font-semibold text-emerald-600">{s.value}</div>
-                  <div className="text-[11px] text-slate-500 mt-1">{s.unit}</div>
+              {data.achievement.stats.length === 0 ? (
+                <div className="md:col-span-3 rounded-2xl border border-slate-200 bg-white p-4 text-center text-xs text-slate-500">
+                  No achievement metrics available yet.
                 </div>
-              ))}
+              ) : (
+                data.achievement.stats.map((s, i) => (
+                  <div key={i} className="bg-white border border-slate-200 rounded-2xl p-4">
+                    <div className="text-lg font-semibold text-emerald-600">{s.value}</div>
+                    <div className="text-[11px] text-slate-500 mt-1">{s.unit}</div>
+                  </div>
+                ))
+              )}
             </div>
           </>
         )}
@@ -159,6 +184,10 @@ export default function CarbonPage() {
               <Skeleton className="h-[110px]" />
               <Skeleton className="h-[110px]" />
             </>
+          ) : data.recommendations.length === 0 ? (
+            <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
+              No recommendations available yet.
+            </div>
           ) : (
             data.recommendations.map((r, i) => (
               <div

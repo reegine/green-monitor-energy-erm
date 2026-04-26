@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { auth } from "../services/auth";
+import { useToast } from "../components/ToastProvider";
 
 export default function SignInPage() {
   const nav = useNavigate();
   const loc = useLocation() as any;
   const from = loc.state?.from ?? "/dashboard";
+  const toast = useToast();
 
-  const [email, setEmail] = useState("noel@admin.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -18,11 +20,13 @@ export default function SignInPage() {
     setErr(null);
     setLoading(true);
     try {
-      await auth.signIn(email, password);
-      // (remember) could store longer; for dummy we ignore
+      await auth.signIn(email, password, remember);
+      toast.success("Welcome back. You are signed in.", "Sign In Success");
       nav(from, { replace: true });
-    } catch (ex: any) {
-      setErr(ex.message ?? "Failed to sign in");
+    } catch (ex: unknown) {
+      const message = ex instanceof Error ? ex.message : "Failed to sign in";
+      setErr(message);
+      toast.error(message, "Sign In Failed");
     } finally {
       setLoading(false);
     }
@@ -38,11 +42,12 @@ export default function SignInPage() {
             {err ? <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">{err}</div> : null}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-2">Email</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-2">Username or Email</label>
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"
+                placeholder="your username or email"
               />
             </div>
 

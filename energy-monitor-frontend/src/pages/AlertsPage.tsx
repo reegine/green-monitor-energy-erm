@@ -5,7 +5,8 @@ import Skeleton from "../components/Skeleton";
 import clsx from "clsx";
 import { Bell, CheckCircle2, Settings2, TriangleAlert, XCircle } from "lucide-react";
 import Modal from "../components/Modal";
-import { loadThresholds, mergeResolved, saveThresholds, setResolved, type Thresholds } from "../services/alertsRuntime";
+import { loadThresholds, mergeResolved, saveThresholdsWithBackend, setResolved, type Thresholds } from "../services/alertsRuntime";
+import { useToast } from "../components/ToastProvider";
 
 type FilterKey = "all" | "critical" | "warning" | "info" | "resolved";
 
@@ -120,9 +121,12 @@ function AlertItemRow(props: {
 
 export default function AlertsPage() {
   const { data, isLoading, error, refetch } = useQuery({ queryKey: ["alerts"], queryFn: api.getAlerts });
+  const toast = useToast();
 
   const [filter, setFilter] = useState<FilterKey>("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [resolveErr, setResolveErr] = useState<string | null>(null);
+  const [settingsErr, setSettingsErr] = useState<string | null>(null);
 
   const thresholdsFallback = data?.thresholds ?? {
     dailyUsageLimit: "15,000 kWh",
@@ -217,6 +221,9 @@ export default function AlertsPage() {
             Recent Alerts ({isLoading ? "…" : mergedList.length})
           </div>
 
+          {resolveErr ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{resolveErr}</div> : null}
+          {settingsErr ? <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">{settingsErr}</div> : null}
+
           <div className="space-y-3">
             {isLoading ? (
               <>
@@ -224,6 +231,10 @@ export default function AlertsPage() {
                 <Skeleton className="h-[110px]" />
                 <Skeleton className="h-[110px]" />
               </>
+            ) : filtered.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
+                No alerts match the current filter.
+              </div>
             ) : (
               filtered.map((a: any) => (
                 <AlertItemRow
@@ -236,8 +247,17 @@ export default function AlertsPage() {
                   severity={a.severity}
                   resolved={a.is_resolved}
                   onResolve={() => {
-                    setResolved(a.id, true);
-                    refetch(); // refresh view (local state will merge on next render)
+                    setResolveErr(null);
+                    void setResolved(a.id, true)
+                      .then(() => {
+                        toast.success("Alert marked as resolved.", "Alerts");
+                        return refetch();
+                      })
+                      .catch((err: unknown) => {
+                        const message = err instanceof Error ? err.message : "Failed to update alert status.";
+                        setResolveErr(message);
+                        toast.error(message, "Alerts");
+                      });
                   }}
                 />
               ))
@@ -306,8 +326,19 @@ export default function AlertsPage() {
             </button>
             <button
               onClick={() => {
-                saveThresholds(thresholdDraft);
-                setSettingsOpen(false);
+                setSettingsErr(null);
+                void saveThresholdsWithBackend(thresholdDraft)
+                  .then(() => {
+                    setSettingsOpen(false);
+                    toast.success("Threshold settings saved.", "Alerts");
+                    void refetch();
+                  })
+                  .catch((err: unknown) => {
+                    const message = err instanceof Error ? err.message : "Failed to save alert settings to backend.";
+                    setSettingsErr(`${message} Your local value is still saved.`);
+                    toast.error(`${message} Your local value is still saved.`, "Alerts");
+                    setSettingsOpen(false);
+                  });
               }}
               className="rounded-xl bg-blue-600 text-white px-4 py-2 text-xs font-semibold shadow-lg shadow-blue-200/40 hover:bg-blue-700 transition"
             >
@@ -354,7 +385,7 @@ export default function AlertsPage() {
             />
           </div>
           <div className="text-[11px] text-slate-500">
-            This is dummy settings stored in <span className="font-semibold">localStorage</span>.
+            These settings are saved locally and synced to backend when values are valid numbers.
           </div>
         </div>
       </Modal>

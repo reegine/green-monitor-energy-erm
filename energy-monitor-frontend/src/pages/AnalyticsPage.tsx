@@ -6,13 +6,7 @@ import StatCard from "../components/StatCard";
 import clsx from "clsx";
 import { CalendarDays, Download, Filter } from "lucide-react";
 import Modal from "../components/Modal";
-import {
-  buildSeries,
-  downloadCsv,
-  toDateInputValue,
-  type AnalyticsTab,
-  type DateRange,
-} from "../services/analyticsRuntime";
+import { buildSeries, downloadCsv, toDateInputValue, type AnalyticsTab, type DateRange } from "../services/analyticsRuntime";
 import {
   CartesianGrid,
   Line,
@@ -44,7 +38,7 @@ export default function AnalyticsPage() {
   const [rangeDraft, setRangeDraft] = useState<DateRange>(range);
   const [rangeOpen, setRangeOpen] = useState(false);
 
-  const series = useMemo(() => buildSeries(tab, range), [tab, range]);
+  const series = useMemo(() => buildSeries(tab, range, data?.readings ?? []), [tab, range, data]);
 
   const kpis = useMemo(() => {
     // Recompute KPI numbers from generated series so it "works"
@@ -82,6 +76,7 @@ export default function AnalyticsPage() {
   }, [series, tab]);
 
   const exportCsv = () => {
+    if (!series.length) return;
     const rows = series.map((p) => ({ period: p.label, kwh: p.kwh, tab, from: range.from, to: range.to }));
     downloadCsv(`energy-analytics_${tab}_${range.from}_to_${range.to}.csv`, rows);
   };
@@ -192,6 +187,10 @@ export default function AnalyticsPage() {
         <div className="mt-4 h-[280px]">
           {isLoading ? (
             <Skeleton className="h-full" />
+          ) : !series.length ? (
+            <div className="h-full grid place-items-center text-xs text-slate-400">
+              No historical data in the selected range.
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={series} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
@@ -221,6 +220,10 @@ export default function AnalyticsPage() {
           <div className="mt-4 h-[260px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
+            ) : data.byRoom.length === 0 ? (
+              <div className="h-full grid place-items-center text-xs text-slate-400">
+                No room-level analytics yet.
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.byRoom} layout="vertical" margin={{ left: 20, right: 10, top: 10, bottom: 0 }}>
@@ -241,6 +244,10 @@ export default function AnalyticsPage() {
           <div className="mt-4 h-[260px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
+            ) : data.byFloor.length === 0 ? (
+              <div className="h-full grid place-items-center text-xs text-slate-400">
+                No floor-level analytics yet.
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.byFloor} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
@@ -264,6 +271,10 @@ export default function AnalyticsPage() {
           <div className="mt-4 h-[220px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
+            ) : data.activity.length === 0 ? (
+              <div className="h-full grid place-items-center text-xs text-slate-400">
+                No activity breakdown available yet.
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -286,6 +297,8 @@ export default function AnalyticsPage() {
                 <Skeleton className="h-8" />
                 <Skeleton className="h-8" />
               </>
+            ) : data.activity.length === 0 ? (
+              <div className="col-span-2 text-center text-[11px] text-slate-400 py-3">No legend data yet.</div>
             ) : (
               data.activity.map((a: any) => (
                 <div key={a.name} className="flex items-center justify-between text-[11px]">
@@ -306,6 +319,10 @@ export default function AnalyticsPage() {
           <div className="mt-4 overflow-x-auto">
             {isLoading || !data ? (
               <Skeleton className="h-[260px]" />
+            ) : data.detailedLog.length === 0 ? (
+              <div className="h-[260px] grid place-items-center text-xs text-slate-400">
+                No detailed log data yet.
+              </div>
             ) : (
               <table className="w-full min-w-[420px] text-[11px]">
                 <thead>

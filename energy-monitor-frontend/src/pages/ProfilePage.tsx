@@ -1,9 +1,23 @@
 import { useNavigate } from "react-router-dom";
 import { auth } from "../services/auth";
+import { useQuery } from "@tanstack/react-query";
+import { useToast } from "../components/ToastProvider";
+import { useEffect } from "react";
 
 export default function ProfilePage() {
   const nav = useNavigate();
-  const user = auth.getUser();
+  const toast = useToast();
+  const { data: user, isError } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => auth.refreshProfile(),
+    initialData: auth.getUser(),
+  });
+
+  useEffect(() => {
+    if (isError) {
+      toast.error("Failed to refresh profile data.", "Profile");
+    }
+  }, [isError, toast]);
 
   return (
     <div className="bg-sky-50/50 border border-slate-200 rounded-2xl px-5 sm:px-7 py-6">
@@ -25,8 +39,10 @@ export default function ProfilePage() {
         <div className="mt-6 flex items-center justify-end">
           <button
             onClick={() => {
-              auth.signOut();
-              nav("/signin", { replace: true });
+              void auth.signOut().finally(() => {
+                toast.info("You have been signed out.", "Logout");
+                nav("/signin", { replace: true });
+              });
             }}
             className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >

@@ -41,6 +41,10 @@ export default function ForecastPage() {
             <Skeleton className="h-[74px]" />
             <Skeleton className="h-[74px]" />
           </>
+        ) : data.insightCards.length === 0 ? (
+          <div className="md:col-span-2 xl:col-span-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
+            Insight cards are not available yet.
+          </div>
         ) : (
           data.insightCards.map((c, i) => <ToneCard key={i} title={c.title} subtitle={c.subtitle} tone={c.tone} />)
         )}
@@ -54,6 +58,10 @@ export default function ForecastPage() {
         <div className="mt-4 h-[280px]">
           {isLoading || !data ? (
             <Skeleton className="h-full" />
+          ) : data.forecastSeries.length === 0 ? (
+            <div className="h-full grid place-items-center text-xs text-slate-400">
+              Forecast data is not available yet.
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.forecastSeries} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
@@ -82,6 +90,10 @@ export default function ForecastPage() {
           <div className="mt-4 h-[220px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
+            ) : data.anomalySeries.length === 0 ? (
+              <div className="h-full grid place-items-center text-xs text-slate-400">
+                No anomaly stream has been detected yet.
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.anomalySeries} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
@@ -113,6 +125,10 @@ export default function ForecastPage() {
                 <Skeleton className="h-[64px]" />
                 <Skeleton className="h-[64px]" />
               </>
+            ) : data.trends.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
+                Trend analysis is not available yet.
+              </div>
             ) : (
               data.trends.map((t, i) => (
                 <div key={i} className="rounded-2xl border border-blue-100 bg-blue-50/30 p-4 flex items-center justify-between">
@@ -147,6 +163,10 @@ export default function ForecastPage() {
               <Skeleton className="h-[90px]" />
               <Skeleton className="h-[90px]" />
             </>
+          ) : data.recommendations.length === 0 ? (
+            <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
+              Recommendations are not available yet.
+            </div>
           ) : (
             data.recommendations.map((r, i) => (
               <div key={i} className="rounded-2xl border border-blue-100 bg-blue-50/25 p-4">

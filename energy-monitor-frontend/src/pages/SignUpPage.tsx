@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { auth } from "../services/auth";
+import { useToast } from "../components/ToastProvider";
 
 export default function SignUpPage() {
   const nav = useNavigate();
-  const [name, setName] = useState("Noel Admin");
-  const [email, setEmail] = useState("noel@admin.com");
-  const [password, setPassword] = useState("admin123");
+  const toast = useToast();
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -15,10 +19,13 @@ export default function SignUpPage() {
     setErr(null);
     setLoading(true);
     try {
-      await auth.signUp(name, email, password);
+      await auth.signUp({ name, username, email, password, remember });
+      toast.success("Your account has been created.", "Sign Up Success");
       nav("/dashboard", { replace: true });
-    } catch (ex: any) {
-      setErr(ex.message ?? "Failed to sign up");
+    } catch (ex: unknown) {
+      const message = ex instanceof Error ? ex.message : "Failed to sign up";
+      setErr(message);
+      toast.error(message, "Sign Up Failed");
     } finally {
       setLoading(false);
     }
@@ -43,6 +50,15 @@ export default function SignUpPage() {
             </div>
 
             <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-2">Username</label>
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+
+            <div>
               <label className="block text-xs font-semibold text-slate-700 mb-2">Email</label>
               <input
                 value={email}
@@ -50,6 +66,16 @@ export default function SignUpPage() {
                 className="w-full rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"
               />
             </div>
+
+            <label className="flex items-center gap-3 text-xs text-slate-600 select-none">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200"
+              />
+              Keep me signed in on this device
+            </label>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-2">Password</label>
@@ -59,6 +85,9 @@ export default function SignUpPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"
               />
+              <div className="mt-2 text-[11px] text-slate-500">
+                Use a strong password (minimum 8 characters). Avoid common passwords.
+              </div>
             </div>
 
             <button

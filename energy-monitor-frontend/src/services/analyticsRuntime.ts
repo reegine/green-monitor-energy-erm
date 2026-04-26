@@ -30,13 +30,19 @@ export function daysBetween(from: Date, to: Date) {
   return Math.max(0, Math.round(ms / (24 * 60 * 60 * 1000)));
 }
 
-function seededNoise(seed: number) {
-  // deterministic-ish random
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
+function toDateKey(value: Date) {
+  return value.toISOString().slice(0, 10);
 }
 
-export function buildSeries(tab: AnalyticsTab, range: DateRange): SeriesPoint[] {
+function inRange(dateKey: string, range: DateRange) {
+  return dateKey >= range.from && dateKey <= range.to;
+}
+
+function sumReadings(readings: Array<{ energy_kwh: number | null; power_watt: number | null }>) {
+  return readings.reduce((acc, reading) => acc + (reading.energy_kwh ?? (reading.power_watt ? reading.power_watt / 1000 : 0)), 0);
+}
+
+function buildFallbackSeries(tab: AnalyticsTab, range: DateRange): SeriesPoint[] {
   const from = parseDate(range.from);
   const to = parseDate(range.to);
   const totalDays = clamp(daysBetween(from, to), 1, 180);
@@ -64,7 +70,6 @@ export function buildSeries(tab: AnalyticsTab, range: DateRange): SeriesPoint[] 
     });
   }
 
-  // Monthly
   const months = clamp(Math.ceil(totalDays / 30), 3, 12);
   const startMonth = parseDate(range.from).getMonth();
   const startYear = parseDate(range.from).getFullYear();
@@ -77,6 +82,73 @@ export function buildSeries(tab: AnalyticsTab, range: DateRange): SeriesPoint[] 
     const n = seededNoise(i + 123) * 24000;
     points.push({ label, kwh: Math.round(base + n) });
   }
+  return points;
+}
+
+function seededNoise(seed: number) {
+  // deterministic-ish random
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+export type AnalyticsReading = {
+  timestamp: string;
+  energy_kwh: number | null;
+  power_watt: number | null;
+};
+
+export function buildSeries(tab: AnalyticsTab, range: DateRange, readings: AnalyticsReading[] = []): SeriesPoint[] {
+  if (!readings.length) {
+    return buildFallbackSeries(tab, range);
+  }
+
+  const from = parseDate(range.from);
+  const to = parseDate(range.to);
+  const filtered = readings.filter((reading) => {
+    const key = toDateKey(new Date(reading.timestamp));
+    return inRange(key, range);
+  });
+
+  if (tab === "Daily") {
+    const points: SeriesPoint[] = [];
+    const current = new Date(from);
+    while (current <= to) {
+      const key = toDateKey(current);
+      const items = filtered.filter((reading) => toDateKey(new Date(reading.timestamp)) === key);
+      points.push({ label: formatMMMdd(current), kwh: Math.round(sumReadings(items)) });
+      current.setDate(current.getDate() + 1);
+    }
+    return points;
+  }
+
+  if (tab === "Weekly") {
+    const weekCount = clamp(Math.ceil((daysBetween(from, to) + 1) / 7), 1, 24);
+    return Array.from({ length: weekCount }).map((_, index) => {
+      const start = new Date(from);
+      start.setDate(from.getDate() + index * 7);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+
+      const items = filtered.filter((reading) => {
+        const readingDate = parseDate(toDateKey(new Date(reading.timestamp)));
+        return readingDate >= start && readingDate <= end;
+      });
+
+      return { label: `Week ${index + 1}`, kwh: Math.round(sumReadings(items)) };
+    });
+  }
+
+  const points: SeriesPoint[] = [];
+  const cursor = new Date(from.getFullYear(), from.getMonth(), 1);
+  const endMonth = new Date(to.getFullYear(), to.getMonth(), 1);
+
+  while (cursor <= endMonth) {
+    const monthKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+    const items = filtered.filter((reading) => toDateKey(new Date(reading.timestamp)).startsWith(monthKey));
+    points.push({ label: cursor.toLocaleString("en-US", { month: "short" }), kwh: Math.round(sumReadings(items)) });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
   return points;
 }
 
