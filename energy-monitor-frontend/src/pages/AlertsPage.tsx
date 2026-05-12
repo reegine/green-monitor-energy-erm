@@ -7,6 +7,7 @@ import { Bell, CheckCircle2, Settings2, TriangleAlert, XCircle } from "lucide-re
 import Modal from "../components/Modal";
 import { loadThresholds, mergeResolved, saveThresholdsWithBackend, setResolved, type Thresholds } from "../services/alertsRuntime";
 import { useToast } from "../components/ToastProvider";
+import InfoTooltip from "../components/InfoTooltip";
 
 type FilterKey = "all" | "critical" | "warning" | "info" | "resolved";
 
@@ -29,7 +30,13 @@ function formatThresholdValue(value: string, unit: string) {
   return unit === "%" ? `${parsed.toLocaleString()}%` : `${parsed.toLocaleString()} ${unit}`;
 }
 
-function SummaryCard(props: { title: string; value: number; icon: React.ReactNode; tone: "blue" | "red" | "orange" | "teal" }) {
+function SummaryCard(props: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+  tone: "blue" | "red" | "orange" | "teal";
+  tooltip: string;
+}) {
   const iconTone =
     props.tone === "blue"
       ? "text-blue-600"
@@ -42,7 +49,10 @@ function SummaryCard(props: { title: string; value: number; icon: React.ReactNod
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between">
       <div>
-        <div className="text-[10px] text-slate-400">{props.title}</div>
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+          <span>{props.title}</span>
+          <InfoTooltip label={`${props.title} help`} content={props.tooltip} />
+        </div>
         <div className="text-xl font-semibold mt-1">{props.value}</div>
       </div>
       <div className={clsx("h-9 w-9 rounded-xl bg-slate-50 border border-slate-200 grid place-items-center", iconTone)}>
@@ -146,6 +156,8 @@ export default function AlertsPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resolveErr, setResolveErr] = useState<string | null>(null);
   const [settingsErr, setSettingsErr] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const thresholdsFallback = data?.thresholds ?? {
     dailyUsageLimit: "15,000 kWh",
@@ -173,6 +185,16 @@ export default function AlertsPage() {
       return a.severity === filter && !a.is_resolved;
     });
   }, [mergedList, filter]);
+
+  // Reset page to 1 when filter changes
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [filter]);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedStart = (currentPage - 1) * itemsPerPage;
+  const paginatedEnd = paginatedStart + itemsPerPage;
+  const currentPageData = filtered.slice(paginatedStart, paginatedEnd);
 
   const thresholds = useMemo(() => loadThresholds(thresholdsFallback), [thresholdsFallback]);
 
@@ -210,10 +232,34 @@ export default function AlertsPage() {
           </>
         ) : (
           <>
-            <SummaryCard title="Active Alerts" value={summary.active} icon={<Bell className="h-4 w-4" />} tone="blue" />
-            <SummaryCard title="Critical" value={summary.critical} icon={<XCircle className="h-4 w-4" />} tone="red" />
-            <SummaryCard title="Warnings" value={summary.warning} icon={<TriangleAlert className="h-4 w-4" />} tone="orange" />
-            <SummaryCard title="Resolved" value={summary.resolved} icon={<CheckCircle2 className="h-4 w-4" />} tone="teal" />
+            <SummaryCard
+              title="Active Alerts"
+              value={summary.active}
+              icon={<Bell className="h-4 w-4" />}
+              tone="blue"
+              tooltip="Alerts that are still open and may need attention."
+            />
+            <SummaryCard
+              title="Critical"
+              value={summary.critical}
+              icon={<XCircle className="h-4 w-4" />}
+              tone="red"
+              tooltip="High-priority alerts from the backend that should be reviewed first."
+            />
+            <SummaryCard
+              title="Warnings"
+              value={summary.warning}
+              icon={<TriangleAlert className="h-4 w-4" />}
+              tone="orange"
+              tooltip="Medium-priority alerts that may become critical if they continue."
+            />
+            <SummaryCard
+              title="Resolved"
+              value={summary.resolved}
+              icon={<CheckCircle2 className="h-4 w-4" />}
+              tone="teal"
+              tooltip="Alerts marked as fixed or acknowledged in the current session."
+            />
           </>
         )}
       </div>
@@ -223,6 +269,10 @@ export default function AlertsPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <div className="h-8 w-8 rounded-xl bg-slate-50 border border-slate-200 grid place-items-center">
             <Settings2 className="h-4 w-4 text-slate-500" />
+          </div>
+
+          <div className="text-[11px] text-slate-500 mr-2">
+            Filters help you narrow the alerts list by severity or status.
           </div>
 
           <Chip active={filter === "all"} label="All" onClick={() => setFilter("all")} />
@@ -237,7 +287,7 @@ export default function AlertsPage() {
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-4 items-start">
         <div>
           <div className="text-xs font-semibold text-slate-700 mb-3">
-            Recent Alerts ({isLoading ? "…" : mergedList.length})
+            Recent Alerts ({isLoading ? "…" : filtered.length})
           </div>
 
           {resolveErr ? <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{resolveErr}</div> : null}
@@ -255,7 +305,7 @@ export default function AlertsPage() {
                 No alerts match the current filter.
               </div>
             ) : (
-              filtered.map((a: any) => (
+              currentPageData.map((a: any) => (
                 <AlertItemRow
                   key={a.id}
                   title={a.title}
@@ -282,10 +332,44 @@ export default function AlertsPage() {
               ))
             )}
           </div>
+
+          {/* Pagination controls */}
+          {!isLoading && filtered.length > itemsPerPage ? (
+            <div className="mt-4 flex items-center justify-between gap-2 rounded-xl bg-white border border-slate-200 px-4 py-3">
+              <div className="text-xs text-slate-600">
+                Showing {paginatedStart + 1} to {Math.min(paginatedEnd, filtered.length)} of {filtered.length} alerts
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <div className="text-xs font-semibold text-slate-700 px-2">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div className="text-xs font-semibold text-slate-700">Alert Thresholds</div>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+            <span>Alert Thresholds</span>
+            <InfoTooltip
+              label="Alert thresholds help"
+              content="These are the values the backend uses to flag usage that is too high, too costly, or rising too fast."
+            />
+          </div>
 
           {isLoading ? (
             <div className="mt-4 space-y-3">
@@ -299,19 +383,31 @@ export default function AlertsPage() {
             <>
               <div className="mt-4 space-y-3 text-[11px]">
                 <div className="flex items-center justify-between text-slate-600">
-                  <span>Daily Usage Limit</span>
+                  <span className="flex items-center gap-1.5">
+                    <span>Daily Usage Limit</span>
+                    <InfoTooltip label="Daily usage limit help" content="Maximum energy allowed per day before an alert is raised." />
+                  </span>
                   <span className="font-semibold text-slate-800">{formatThresholdValue(thresholds.dailyUsageLimit, "kWh")}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
-                  <span>Peak Demand</span>
+                  <span className="flex items-center gap-1.5">
+                    <span>Peak Demand</span>
+                    <InfoTooltip label="Peak demand help" content="Highest power level allowed before a peak-demand alert is triggered." />
+                  </span>
                   <span className="font-semibold text-slate-800">{formatThresholdValue(thresholds.peakDemand, "W")}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
-                  <span>Budget Threshold</span>
+                  <span className="flex items-center gap-1.5">
+                    <span>Budget Threshold</span>
+                    <InfoTooltip label="Budget threshold help" content="Percentage of the budget that can be used before warning alerts appear." />
+                  </span>
                   <span className="font-semibold text-slate-800">{formatThresholdValue(thresholds.budgetThreshold, "%")}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
-                  <span>Usage Spike Alert</span>
+                  <span className="flex items-center gap-1.5">
+                    <span>Usage Spike Alert</span>
+                    <InfoTooltip label="Usage spike alert help" content="How much usage can jump in a short time before the system warns you." />
+                  </span>
                   <span className="font-semibold text-slate-800">{formatThresholdValue(thresholds.usageSpikeAlert, "%")}</span>
                 </div>
               </div>

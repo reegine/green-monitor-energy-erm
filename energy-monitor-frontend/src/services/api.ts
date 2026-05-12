@@ -53,7 +53,8 @@ export type ForecastDTO = {
 export type CarbonDTO = {
   headerDateText: string;
   kpis: { title: string; value: string; unit: string; delta: string; iconTone: "blue" | "purple" | "green" | "pink" }[];
-  trend: { month: string; actual: number; target: number }[];
+  trend: { month: string; actual: number }[];
+  records: { date: string; actual: number }[];
   sources: { name: string; value: number }[];
   achievement: { title: string; subtitle: string; stats: { value: string; unit: string }[] };
   recommendations: { title: string; subtitle: string; footer: string; tone: "purple" | "teal" }[];
@@ -61,7 +62,9 @@ export type CarbonDTO = {
 
 export type AnalyticsDTO = {
   headerDateText: string;
-  readings: { timestamp: string; energy_kwh: number | null; power_watt: number | null }[];
+  readings: { timestamp: string; device: number; energy_kwh: number | null; power_watt: number | null }[];
+  rooms: RoomRecord[];
+  devices: DeviceRecord[];
   byRoom: { room: string; kwh: number }[];
   byFloor: { floor: string; kwh: number }[];
   activity: { name: string; kwh: number; color: string }[];
@@ -362,23 +365,31 @@ function fallbackDashboardDto(): DashboardDTO {
   };
 }
 
-function fallbackCarbonDto(): CarbonDTO {
+
+async function loadCarbonContext(): Promise<MonitoringContext> {
+  const [buildings, rooms, devices, readings, carbon, alerts, predictions, thresholdRules] = await Promise.all([
+    fetchBuildings(),
+    fetchRooms(),
+    fetchDevices(),
+    fetchReadings(),
+    fetchCarbonFootprints(),
+    fetchAlerts(),
+    fetchPredictions(),
+    fetchThresholdRules(),
+  ]);
+
+  const thresholdSettings = await fetchThresholdSettingsCurrent();
+
   return {
-    headerDateText: formatFullDate(new Date().toISOString()),
-    kpis: [
-      { title: "Current Month Emissions", value: "0.0", unit: "tons CO₂", delta: "No trend data", iconTone: "blue" },
-      { title: "YTD Emissions", value: "0.0", unit: "tons CO₂", delta: "No trend data", iconTone: "purple" },
-      { title: "Trees Equivalent", value: "0", unit: "trees", delta: "No trend data", iconTone: "green" },
-      { title: "Cars Removed", value: "0.0", unit: "annually", delta: "No trend data", iconTone: "pink" },
-    ],
-    trend: [],
-    sources: [],
-    achievement: {
-      title: "Sustainability Achievement",
-      subtitle: "No carbon data available yet.",
-      stats: [],
-    },
-    recommendations: [],
+    buildings,
+    rooms,
+    devices,
+    readings: [...readings].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    carbon: [...carbon].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    alerts: [...alerts].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    predictions: [...predictions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    thresholdRules,
+    thresholdSettings,
   };
 }
 
@@ -397,6 +408,8 @@ function fallbackAnalyticsDto(): AnalyticsDTO {
   return {
     headerDateText: formatFullDate(new Date().toISOString()),
     readings: [],
+    rooms: [],
+    devices: [],
     byRoom: [],
     byFloor: [],
     activity: [],
@@ -438,8 +451,8 @@ function buildDashboardDto(context: MonitoringContext): DashboardDTO {
 
   const currentCarbon = context.carbon.find((item) => item.date.startsWith(monthKey)) ?? context.carbon[0];
   const previousCarbon = context.carbon.find((item) => item.date.startsWith(prevMonth)) ?? context.carbon[1];
-  const currentCarbonTons = (currentCarbon?.emission_kg_co2 ?? 0) / 1000;
-  const previousCarbonTons = (previousCarbon?.emission_kg_co2 ?? 0) / 1000;
+  const currentCarbonTons = currentCarbon?.emission_kg_co2;
+  const previousCarbonTons = previousCarbon?.emission_kg_co2;
 
   const realtimeSeries = (todayReadings.length ? todayReadings : context.readings.slice(0, 12)).slice(0, 12).map((reading) => ({
     time: formatTimeLabel(reading.timestamp),
@@ -461,7 +474,7 @@ function buildDashboardDto(context: MonitoringContext): DashboardDTO {
       },
       carbonEmissions: {
         value: round(currentCarbonTons, 1),
-        unit: "tons CO₂",
+        unit: "kg CO₂",
         deltaText: changeLabel(comparePercent(currentCarbonTons, previousCarbonTons), "last month"),
         deltaTone: toneFromChange(comparePercent(currentCarbonTons, previousCarbonTons)),
       },
@@ -495,9 +508,9 @@ function buildCarbonDto(context: MonitoringContext): CarbonDTO {
 
   const monthCarbon = context.carbon.find((item) => item.date.startsWith(monthKey)) ?? context.carbon[0];
   const lastMonthCarbon = context.carbon.find((item) => item.date.startsWith(prevMonth)) ?? context.carbon[1];
-  const monthTons = (monthCarbon?.emission_kg_co2 ?? 0) / 1000;
-  const lastMonthTons = (lastMonthCarbon?.emission_kg_co2 ?? 0) / 1000;
-  const ytdTons = context.carbon.filter((item) => item.date.startsWith(monthKey.slice(0, 4))).reduce((acc, item) => acc + item.emission_kg_co2 / 1000, 0);
+  const monthKg = monthCarbon?.emission_kg_co2 ?? 0;
+  const lastMonthKg = lastMonthCarbon?.emission_kg_co2 ?? 0;
+  const ytdKg = context.carbon.filter((item) => item.date.startsWith(monthKey.slice(0, 4))).reduce((acc, item) => acc + item.emission_kg_co2, 0);
 
   const sources = activityRows(monthReadings, context).map((row) => ({
     name: row.name,
@@ -506,51 +519,44 @@ function buildCarbonDto(context: MonitoringContext): CarbonDTO {
 
   const trend = context.carbon.slice(-6).map((entry) => ({
     month: formatMonthLabel(entry.date),
-    actual: round(entry.emission_kg_co2 / 1000, 1),
-    target: round((entry.emission_kg_co2 / 1000) * 0.92, 1),
+    actual: round(entry.emission_kg_co2, 1),
   }));
+
+  const records = [...context.carbon]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((entry) => ({
+      date: entry.date,
+      actual: round(entry.emission_kg_co2, 1),
+    }));
 
   return {
     headerDateText: formatFullDate(monthCarbon?.date ?? context.carbon[0]?.date ?? new Date().toISOString()),
     kpis: [
       {
         title: "Current Month Emissions",
-        value: round(monthTons, 1).toFixed(1),
-        unit: "tons CO₂",
-        delta: `${monthTons <= lastMonthTons ? "↓" : "↑"} ${Math.abs(comparePercent(monthTons, lastMonthTons)).toFixed(1)}% vs last month`,
+        value: round(monthKg, 1).toFixed(1),
+        unit: "kg CO₂",
+        delta: `${monthKg <= lastMonthKg ? "↓" : "↑"} ${Math.abs(comparePercent(monthKg, lastMonthKg)).toFixed(1)}% vs last month`,
         iconTone: "blue",
       },
       {
         title: "YTD Emissions",
-        value: round(ytdTons, 1).toFixed(1),
-        unit: "tons CO₂",
-        delta: `↓ ${Math.abs(comparePercent(ytdTons, ytdTons * 1.12 || ytdTons)).toFixed(1)}% vs target`,
+        value: round(ytdKg, 1).toFixed(1),
+        unit: "kg CO₂",
+        delta: `↓ ${Math.abs(comparePercent(ytdKg, lastMonthKg || ytdKg)).toFixed(1)}% vs last month`,
         iconTone: "purple",
-      },
-      {
-        title: "Trees Equivalent",
-        value: String(Math.round(ytdTons * 16.5)),
-        unit: "trees",
-        delta: "Carbon offset needed",
-        iconTone: "green",
-      },
-      {
-        title: "Cars Removed",
-        value: round(ytdTons / 4.6, 1).toFixed(1),
-        unit: "annually",
-        delta: "Equivalent impact",
-        iconTone: "pink",
       },
     ],
     trend,
+    records,
     sources,
     achievement: {
       title: "Sustainability Achievement",
-      subtitle: `Current month emissions are ${monthTons <= lastMonthTons ? "down" : "up"} ${Math.abs(comparePercent(monthTons, lastMonthTons)).toFixed(1)}% compared to the previous month.`,
+      subtitle: `Current month emissions are ${monthKg <= lastMonthKg ? "down" : "up"} ${Math.abs(comparePercent(monthKg, lastMonthKg)).toFixed(1)}% compared to the previous month.`,
       stats: [
-        { value: `${round(Math.max(lastMonthTons - monthTons, 0), 1).toFixed(1)}`, unit: "tons CO₂ avoided" },
+        { value: `${round(Math.max(lastMonthKg - monthKg, 0), 1).toFixed(1)}`, unit: "kg CO₂ avoided" },
         { value: `$${Math.round(sumEnergy(monthReadings) * 0.12).toLocaleString()}`, unit: "Cost savings" },
-        { value: `${round(comparePercent(lastMonthTons, monthTons || lastMonthTons), 1).toFixed(1)}%`, unit: "Efficiency improvement" },
+        { value: `${round(comparePercent(lastMonthKg, monthKg || lastMonthKg), 1).toFixed(1)}%`, unit: "Efficiency improvement" },
       ],
     },
     recommendations: [
@@ -680,9 +686,12 @@ function buildAnalyticsDto(context: LookupContext): AnalyticsDTO {
     headerDateText: formatFullDate(context.readings[0]?.timestamp ?? new Date().toISOString()),
     readings: context.readings.map((reading) => ({
       timestamp: reading.timestamp,
+      device: reading.device,
       energy_kwh: reading.energy_kwh,
       power_watt: reading.power_watt,
     })),
+    rooms: context.rooms,
+    devices: context.devices,
     byRoom: roomRows(monthReadings, context).slice(0, 8).map((row) => ({ room: row.room, kwh: round(row.kwh, 1) })),
     byFloor: floorRows(monthReadings, context).slice(0, 6).map((row) => ({ floor: row.floor, kwh: round(row.kwh, 1) })),
     activity: activityRows(monthReadings, context),
@@ -721,11 +730,7 @@ export const api = {
     }
   },
   async getCarbon(): Promise<CarbonDTO> {
-    try {
-      return buildCarbonDto(await loadMonitoringContext());
-    } catch {
-      return fallbackCarbonDto();
-    }
+    return buildCarbonDto(await loadCarbonContext());
   },
   async getAnalytics(): Promise<AnalyticsDTO> {
     try {

@@ -100,7 +100,7 @@ export type AnalyticsReading = {
 export type CarbonExportData = {
   headerDateText?: string;
   kpis: { title: string; value: string; unit: string; delta: string; iconTone: "blue" | "purple" | "green" | "pink" }[];
-  trend: { month: string; actual: number; target: number }[];
+  trend: { month: string; actual: number }[];
   sources: { name: string; value: number }[];
   achievement: { title: string; subtitle: string; stats: { value: string; unit: string }[] };
   recommendations: { title: string; subtitle: string; footer: string; tone: "purple" | "teal" }[];
@@ -215,7 +215,7 @@ export async function downloadCarbonPdf(filename: string, data: CarbonExportData
   doc.text("Carbon Footprint Report", margin + 20, 74);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text("A readable summary of emissions, targets, and offset recommendations.", margin + 20, 94, {
+  doc.text("A readable summary of emissions and offset recommendations.", margin + 20, 94, {
     maxWidth: contentWidth - 180,
   });
   doc.setFont("helvetica", "bold");
@@ -246,11 +246,8 @@ export async function downloadCarbonPdf(filename: string, data: CarbonExportData
 
   autoTable(pdfDoc, {
     startY: 280,
-    head: [["Month", "Actual", "Target", "Gap"]],
-    body: data.trend.map((row) => {
-      const gap = row.actual - row.target;
-      return [row.month, row.actual.toFixed(1), row.target.toFixed(1), `${gap >= 0 ? "+" : ""}${gap.toFixed(1)}`];
-    }),
+    head: [["Month", "Actual"]],
+    body: data.trend.map((row) => [row.month, row.actual.toFixed(1)]),
     margin: { left: margin, right: margin },
     styles: { font: "helvetica", fontSize: 9, cellPadding: 6, textColor: [51, 65, 85] },
     headStyles: { fillColor: titleColor, textColor: [255, 255, 255] },

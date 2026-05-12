@@ -36,6 +36,7 @@ export default function DashboardPage() {
               <StatCard
                 title="Current Power Usage"
                 value={`${data.kpis.currentPowerUsage.value} ${data.kpis.currentPowerUsage.unit}`}
+                tooltip="Latest power reading from the most recent sensor data."
                 icon={<Bolt className="h-4 w-4 text-blue-600" />}
                 iconBg="bg-blue-50"
               />
@@ -44,6 +45,7 @@ export default function DashboardPage() {
                 value={`${data.kpis.todaysConsumption.value.toLocaleString()} ${data.kpis.todaysConsumption.unit}`}
                 sub={data.kpis.todaysConsumption.deltaText}
                 subTone={data.kpis.todaysConsumption.deltaTone === "up" ? "up" : "muted"}
+                tooltip="Total energy used today from backend readings, compared with the previous day."
                 icon={<TrendingUp className="h-4 w-4 text-orange-600" />}
                 iconBg="bg-orange-50"
               />
@@ -52,6 +54,7 @@ export default function DashboardPage() {
                 value={`${data.kpis.carbonEmissions.value} ${data.kpis.carbonEmissions.unit}`}
                 sub={data.kpis.carbonEmissions.deltaText}
                 subTone={data.kpis.carbonEmissions.deltaTone === "down" ? "down" : "muted"}
+                tooltip="Estimated monthly carbon output converted from the stored carbon footprint records."
                 icon={<CloudSun className="h-4 w-4 text-cyan-600" />}
                 iconBg="bg-cyan-50"
               />

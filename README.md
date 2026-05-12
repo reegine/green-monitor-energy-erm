@@ -59,6 +59,7 @@ Notes:
 - `VITE_API_TIMEOUT_MS` controls request timeout in milliseconds.
 - `VITE_API_AUTH_PREFIX` depends on backend route structure.
 - Current backend swagger exposes auth endpoints under `/api/auth/auth/*`, so `/auth/auth` is the default.
+- `VITE_ENABLE_API_LOGS = 1` to enable logging for Front end developer
 
 ## Backend Endpoints Used
 
@@ -115,7 +116,7 @@ UI behavior:
 
 - Connected to backend auth endpoints
 - Sign up supports username + name + email + password
-- Username/email supported in sign in input
+- Username supported in sign in input
 - Form fields are intentionally blank by default (no prefilled account)
 
 ### Profile
@@ -159,20 +160,7 @@ If Sign Up fails, check:
 
 If Sign In fails, check:
 
-1. You entered username/email and password correctly
+1. You entered username and password correctly
 2. Backend server is running at the `.env` API URL
 3. `VITE_API_AUTH_PREFIX` matches backend auth routes
 
-## Known Backend Gaps / Notes
-
-These are backend-side observations and were not modified by frontend changes:
-
-1. Auth route nesting is duplicated (`/api/auth/auth/*`) due include-path composition.
-2. Threshold settings serializer uses camelCase fields (`dailyUsageLimit`, `peakDemand`, etc.), which frontend follows.
-3. Frontend computes several aggregate analytics client-side from raw backend readings (no dedicated summary endpoint yet).
-
-## Recommended Next Improvements
-
-1. Add backend summary endpoints for dashboard KPIs and analytics aggregations to reduce client compute cost.
-2. Normalize auth URL structure to `/api/auth/*` for cleaner API surface.
-3. Add backend validation/error schema consistency for cleaner frontend message mapping.
