@@ -191,8 +191,11 @@ export const auth = {
 
   async signIn(emailOrUsername: string, password: string, remember = true) {
     const identity = emailOrUsername.trim();
-    if (!identity || password.length < 3) {
-      throw new Error("Username/email and password are required.");
+    if (!identity) {
+      throw new Error("Enter your username");
+    }
+    if (password.length < 8) {
+      throw new Error("Password must be at least 8 characters.");
     }
 
     const attempts = identity.includes("@")
@@ -241,9 +244,9 @@ export const auth = {
     const password = input.password;
     const remember = input.remember ?? true;
 
-    if (name.length < 2) throw new Error("Name is too short.");
-    if (!username) throw new Error("Username is required.");
-    if (!email.includes("@")) throw new Error("Invalid email.");
+    if (name.length < 2) throw new Error("Please enter your full name.");
+    if (!username) throw new Error("Choose a username.");
+    if (!email.includes("@")) throw new Error("Enter a valid email address.");
     if (password.length < 8) throw new Error("Password must be at least 8 characters.");
 
     const parts = splitName(name);

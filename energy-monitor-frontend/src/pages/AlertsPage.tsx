@@ -10,6 +10,25 @@ import { useToast } from "../components/ToastProvider";
 
 type FilterKey = "all" | "critical" | "warning" | "info" | "resolved";
 
+function numericOnly(value: string) {
+  return value.replace(/[^0-9.]/g, "");
+}
+
+function normalizeThresholdDraft(thresholds: Thresholds): Thresholds {
+  return {
+    dailyUsageLimit: numericOnly(thresholds.dailyUsageLimit),
+    peakDemand: numericOnly(thresholds.peakDemand),
+    budgetThreshold: numericOnly(thresholds.budgetThreshold),
+    usageSpikeAlert: numericOnly(thresholds.usageSpikeAlert),
+  };
+}
+
+function formatThresholdValue(value: string, unit: string) {
+  const parsed = Number(numericOnly(value));
+  if (!Number.isFinite(parsed)) return value;
+  return unit === "%" ? `${parsed.toLocaleString()}%` : `${parsed.toLocaleString()} ${unit}`;
+}
+
 function SummaryCard(props: { title: string; value: number; icon: React.ReactNode; tone: "blue" | "red" | "orange" | "teal" }) {
   const iconTone =
     props.tone === "blue"
@@ -135,7 +154,7 @@ export default function AlertsPage() {
     usageSpikeAlert: "20%",
   };
 
-  const [thresholdDraft, setThresholdDraft] = useState<Thresholds>(() => loadThresholds(thresholdsFallback));
+  const [thresholdDraft, setThresholdDraft] = useState<Thresholds>(() => normalizeThresholdDraft(loadThresholds(thresholdsFallback)));
 
   const mergedList = useMemo(() => (data ? mergeResolved(data.list) : []), [data]);
 
@@ -170,7 +189,7 @@ export default function AlertsPage() {
 
         <button
           onClick={() => {
-            setThresholdDraft(thresholds);
+            setThresholdDraft(normalizeThresholdDraft(thresholds));
             setSettingsOpen(true);
           }}
           className="hidden sm:inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
@@ -281,19 +300,19 @@ export default function AlertsPage() {
               <div className="mt-4 space-y-3 text-[11px]">
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Daily Usage Limit</span>
-                  <span className="font-semibold text-slate-800">{thresholds.dailyUsageLimit}</span>
+                  <span className="font-semibold text-slate-800">{formatThresholdValue(thresholds.dailyUsageLimit, "kWh")}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Peak Demand</span>
-                  <span className="font-semibold text-slate-800">{thresholds.peakDemand}</span>
+                  <span className="font-semibold text-slate-800">{formatThresholdValue(thresholds.peakDemand, "W")}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Budget Threshold</span>
-                  <span className="font-semibold text-slate-800">{thresholds.budgetThreshold}</span>
+                  <span className="font-semibold text-slate-800">{formatThresholdValue(thresholds.budgetThreshold, "%")}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span>Usage Spike Alert</span>
-                  <span className="font-semibold text-slate-800">{thresholds.usageSpikeAlert}</span>
+                  <span className="font-semibold text-slate-800">{formatThresholdValue(thresholds.usageSpikeAlert, "%")}</span>
                 </div>
               </div>
 
@@ -327,16 +346,34 @@ export default function AlertsPage() {
             <button
               onClick={() => {
                 setSettingsErr(null);
-                void saveThresholdsWithBackend(thresholdDraft)
+                const nextDraft = normalizeThresholdDraft(thresholdDraft);
+                const values = Object.values(nextDraft);
+                if (values.some((value) => value.trim() === "")) {
+                  const message = "Please enter numbers only for all threshold values.";
+                  setSettingsErr(message);
+                  toast.error(message, "Alerts");
+                  return;
+                }
+
+                const parsedValues = values.map((value) => Number(value));
+                if (parsedValues.some((value) => !Number.isFinite(value) || value < 0)) {
+                  const message = "Please enter numbers only for all threshold values.";
+                  setSettingsErr(message);
+                  toast.error(message, "Alerts");
+                  return;
+                }
+
+                void saveThresholdsWithBackend(nextDraft)
                   .then(() => {
                     setSettingsOpen(false);
                     toast.success("Threshold settings saved.", "Alerts");
                     void refetch();
                   })
                   .catch((err: unknown) => {
-                    const message = err instanceof Error ? err.message : "Failed to save alert settings to backend.";
-                    setSettingsErr(`${message} Your local value is still saved.`);
-                    toast.error(`${message} Your local value is still saved.`, "Alerts");
+                    const message = err instanceof Error ? err.message : "Failed to save alert settings.";
+                    const friendly = `${message} Your local value is still saved.`;
+                    setSettingsErr(friendly);
+                    toast.error(friendly, "Alerts");
                     setSettingsOpen(false);
                   });
               }}
@@ -352,36 +389,52 @@ export default function AlertsPage() {
             <div className="text-xs font-semibold text-slate-700 mb-2">Daily Usage Limit</div>
             <input
               value={thresholdDraft.dailyUsageLimit}
-              onChange={(e) => setThresholdDraft((t) => ({ ...t, dailyUsageLimit: e.target.value }))}
+              onChange={(e) => setThresholdDraft((t) => ({ ...t, dailyUsageLimit: numericOnly(e.target.value) }))}
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              placeholder="15,000 kWh"
+              placeholder="15000"
             />
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-700 mb-2">Peak Demand</div>
             <input
               value={thresholdDraft.peakDemand}
-              onChange={(e) => setThresholdDraft((t) => ({ ...t, peakDemand: e.target.value }))}
+              onChange={(e) => setThresholdDraft((t) => ({ ...t, peakDemand: numericOnly(e.target.value) }))}
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              placeholder="700 kWh"
+              placeholder="700"
             />
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-700 mb-2">Budget Threshold</div>
             <input
               value={thresholdDraft.budgetThreshold}
-              onChange={(e) => setThresholdDraft((t) => ({ ...t, budgetThreshold: e.target.value }))}
+              onChange={(e) => setThresholdDraft((t) => ({ ...t, budgetThreshold: numericOnly(e.target.value) }))}
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              placeholder="95%"
+              placeholder="95"
             />
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-700 mb-2">Usage Spike Alert</div>
             <input
               value={thresholdDraft.usageSpikeAlert}
-              onChange={(e) => setThresholdDraft((t) => ({ ...t, usageSpikeAlert: e.target.value }))}
+              onChange={(e) => setThresholdDraft((t) => ({ ...t, usageSpikeAlert: numericOnly(e.target.value) }))}
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              placeholder="20%"
+              placeholder="20"
             />
           </div>
           <div className="text-[11px] text-slate-500">

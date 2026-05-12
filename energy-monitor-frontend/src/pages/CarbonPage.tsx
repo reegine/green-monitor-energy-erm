@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../services/api";
+import { api, type CarbonDTO } from "../services/api";
 import Skeleton from "../components/Skeleton";
-import { Download } from "lucide-react";
+import { ChevronDown, Download, FileText } from "lucide-react";
 import clsx from "clsx";
-import { downloadCsv } from "../services/analyticsRuntime";
+import { downloadCarbonPdf, downloadCsv } from "../services/analyticsRuntime";
 import {
   Area,
   AreaChart,
@@ -18,9 +19,34 @@ import {
 } from "recharts";
 
 export default function CarbonPage() {
-  const { data, isLoading, error } = useQuery({ queryKey: ["carbon"], queryFn: api.getCarbon });
+  const { data, isLoading, error } = useQuery<CarbonDTO>({ queryKey: ["carbon"], queryFn: api.getCarbon });
+  const [exportOpen, setExportOpen] = useState(false);
 
   if (error) return <div className="text-sm text-red-600">Failed to load carbon data.</div>;
+
+  const downloadCsvReport = () => {
+    if (!data) return;
+
+    downloadCsv(
+      `carbon-report_${new Date().toISOString().slice(0, 10)}.csv`,
+      data.trend.map((row) => ({ month: row.month, actual_tons: row.actual, target_tons: row.target }))
+    );
+    setExportOpen(false);
+  };
+
+  const downloadPdfReport = async () => {
+    if (!data) return;
+
+    await downloadCarbonPdf(`carbon-report_${new Date().toISOString().slice(0, 10)}.pdf`, data);
+    setExportOpen(false);
+  };
+
+  const downloadBothReport = async () => {
+    if (!data) return;
+
+    downloadCsvReport();
+    await downloadPdfReport();
+  };
 
   return (
     <div className="bg-sky-50/50 border border-slate-200 rounded-2xl px-5 sm:px-7 py-6">
@@ -30,20 +56,43 @@ export default function CarbonPage() {
           <div className="text-xs text-slate-500 mt-1">Track and reduce your environmental impact</div>
         </div>
 
-        <button
-          disabled={!data || data.trend.length === 0}
-          onClick={() => {
-            if (!data) return;
-            downloadCsv(
-              `carbon-report_${new Date().toISOString().slice(0, 10)}.csv`,
-              data.trend.map((row) => ({ month: row.month, actual_tons: row.actual, target_tons: row.target }))
-            );
-          }}
-          className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-blue-600 text-white px-4 py-2 text-xs font-semibold shadow-lg shadow-blue-200/40 hover:bg-blue-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          <Download className="h-4 w-4" />
-          Download Report
-        </button>
+        <div className="relative hidden sm:block">
+          <button
+            disabled={!data || data.trend.length === 0}
+            onClick={() => setExportOpen((value) => !value)}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 text-white px-4 py-2 text-xs font-semibold shadow-lg shadow-blue-200/40 hover:bg-blue-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Download className="h-4 w-4" />
+            Download Report
+            <ChevronDown className="h-4 w-4" />
+          </button>
+
+          {exportOpen && data && data.trend.length > 0 ? (
+            <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 w-60 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-xl shadow-slate-200/60">
+              <button
+                onClick={downloadCsvReport}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <Download className="h-4 w-4 text-blue-600" />
+                Download CSV
+              </button>
+              <button
+                onClick={downloadPdfReport}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <FileText className="h-4 w-4 text-emerald-600" />
+                Download PDF
+              </button>
+              <button
+                onClick={downloadBothReport}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <span className="flex h-4 w-4 items-center justify-center text-slate-400">+</span>
+                Download Both
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* KPI row */}

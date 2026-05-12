@@ -140,6 +140,8 @@ function normalizePath(path: string) {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
+import { logRequest, logResponse, logError } from "./logger";
+
 function parseJsonSafe(text: string): unknown {
   if (!text) return null;
   try {
@@ -149,19 +151,53 @@ function parseJsonSafe(text: string): unknown {
   }
 }
 
-function extractErrorMessage(data: unknown, fallback: string) {
-  if (!data) return fallback;
-  if (typeof data === "string") return data;
+function isHtmlLikeText(value: string) {
+  return /<!doctype|<html|<head|<body|<title|<script|<div|<p|<h1/i.test(value);
+}
+
+function cleanErrorText(value: string) {
+  const stripped = value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  if (!stripped) return null;
+  if (/^(\d{3}|http error \d{3})$/i.test(stripped)) return null;
+  return stripped;
+}
+
+function friendlyFallbackMessage(status: number) {
+  if (status === 400 || status === 422) return "Please check the information you entered and try again.";
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to perform this action.";
+  if (status === 404) return "The requested item could not be found.";
+  if (status === 408) return "The request timed out. Please try again.";
+  if (status >= 500) return "The server had a problem. Please try again later.";
+  return "We could not complete your request. Please try again.";
+}
+
+function extractErrorMessage(data: unknown, fallback: string, status = 0) {
+  const safeFallback = fallback || friendlyFallbackMessage(status);
+  if (!data) return safeFallback;
+  if (typeof data === "string") {
+    if (isHtmlLikeText(data)) return safeFallback;
+    return cleanErrorText(data) ?? safeFallback;
+  }
   if (typeof data !== "object") return fallback;
 
   const detail = (data as { detail?: unknown }).detail;
-  if (typeof detail === "string") return detail;
+  if (typeof detail === "string") {
+    if (isHtmlLikeText(detail)) return safeFallback;
+    return cleanErrorText(detail) ?? safeFallback;
+  }
 
   const firstValue = Object.values(data as Record<string, unknown>)[0];
-  if (typeof firstValue === "string") return firstValue;
-  if (Array.isArray(firstValue) && typeof firstValue[0] === "string") return firstValue[0];
+  if (typeof firstValue === "string") {
+    if (isHtmlLikeText(firstValue)) return safeFallback;
+    return cleanErrorText(firstValue) ?? safeFallback;
+  }
+  if (Array.isArray(firstValue) && typeof firstValue[0] === "string") {
+    if (isHtmlLikeText(firstValue[0])) return safeFallback;
+    return cleanErrorText(firstValue[0]) ?? safeFallback;
+  }
 
-  return fallback;
+  return safeFallback;
 }
 
 function resolveUrl(pathOrUrl: string) {
@@ -197,6 +233,14 @@ async function executeRequest(
       }
     }
 
+    const method = init?.method ?? "GET";
+    // prepare a headers plain object for logging (without exposing Authorization value)
+    const headersObj: Record<string, string> = {};
+    headers.forEach((v, k) => (headersObj[k] = k.toLowerCase() === "authorization" ? "<redacted>" : v));
+    const requestBody = init?.body ? (typeof init.body === "string" ? init.body : safeBodyForLog(init.body)) : undefined;
+
+    logRequest({ url: resolveUrl(path), method, headers: headersObj, body: requestBody });
+
     const response = await fetch(resolveUrl(path), {
       ...init,
       headers,
@@ -205,14 +249,33 @@ async function executeRequest(
 
     const raw = await response.text();
     const data = parseJsonSafe(raw);
+
+    logResponse({ url: resolveUrl(path), status: response.status, data });
+
     return { response, data };
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new ApiError("Request timed out. Please try again.", 408, null);
     }
+    try {
+      logError({ url: resolveUrl(path), error });
+    } catch {}
     throw error;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function safeBodyForLog(body: unknown) {
+  try {
+    if (typeof body === "string") return body.slice(0, 200);
+    return JSON.parse(String(body));
+  } catch {
+    try {
+      return String(body).slice(0, 200);
+    } catch {
+      return undefined;
+    }
   }
 }
 
@@ -233,7 +296,7 @@ async function request<T>(
 
     const second = await executeRequest(path, init, { withAuth: true });
     if (!second.response.ok) {
-      const message = extractErrorMessage(second.data, second.response.statusText || "Request failed");
+      const message = extractErrorMessage(second.data, second.response.statusText || "Request failed", second.response.status);
       if (second.response.status === 401) {
         authHandlers.onUnauthorized();
       }
@@ -243,7 +306,7 @@ async function request<T>(
   }
 
   if (!first.response.ok) {
-    const message = extractErrorMessage(first.data, first.response.statusText || "Request failed");
+    const message = extractErrorMessage(first.data, first.response.statusText || "Request failed", first.response.status);
     throw new ApiError(message, first.response.status, first.data);
   }
 
