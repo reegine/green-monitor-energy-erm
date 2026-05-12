@@ -1,24 +1,50 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { auth } from "../services/auth";
+import { useToast } from "../components/ToastProvider";
 
 export default function SignUpPage() {
   const nav = useNavigate();
-  const [name, setName] = useState("Noel Admin");
-  const [email, setEmail] = useState("noel@admin.com");
-  const [password, setPassword] = useState("admin123");
+  const toast = useToast();
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
+
+    if (name.trim().length < 2) {
+      setErr("Please enter your full name.");
+      return;
+    }
+    if (!username.trim()) {
+      setErr("Choose a username.");
+      return;
+    }
+    if (!email.includes("@")) {
+      setErr("Enter a valid email address.");
+      return;
+    }
+    if (password.length < 8) {
+      setErr("Password must be at least 8 characters.");
+      return;
+    }
+
     setLoading(true);
     try {
-      await auth.signUp(name, email, password);
+      await auth.signUp({ name, username, email, password, remember });
+      toast.success("Your account has been created.", "Sign Up Success");
       nav("/dashboard", { replace: true });
-    } catch (ex: any) {
-      setErr(ex.message ?? "Failed to sign up");
+    } catch (ex: unknown) {
+      const message = ex instanceof Error ? ex.message : "Failed to sign up";
+      setErr(message);
+      toast.error(message, "Sign Up Failed");
     } finally {
       setLoading(false);
     }
@@ -38,6 +64,19 @@ export default function SignUpPage() {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="name"
+                className="w-full rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-2">Username</label>
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                autoComplete="username"
                 className="w-full rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"
               />
             </div>
@@ -45,20 +84,61 @@ export default function SignUpPage() {
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-2">Email</label>
               <input
+                type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
                 className="w-full rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"
               />
             </div>
 
+            <label className="flex items-center gap-3 text-xs text-slate-600 select-none">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-200"
+              />
+              Keep me signed in on this device
+            </label>
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-2">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-200"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  minLength={8}
+                  required
+                  autoComplete="new-password"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-200 pr-12"
+                  placeholder="Create a strong password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 focus:outline-none"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    // Eye closed icon (hide)
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    // Eye open icon (show)
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <div className="mt-2 text-[11px] text-slate-500">
+                Use a strong password (minimum 8 characters). Avoid common passwords.
+              </div>
             </div>
 
             <button

@@ -3,6 +3,7 @@ import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
+import { logPageView } from "../services/logger";
 
 export default function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -10,6 +11,10 @@ export default function AppShell() {
 
   useEffect(() => {
     setMobileOpen(false);
+    // record page view for navigation
+    try {
+      logPageView(pathname);
+    } catch {}
   }, [pathname]);
 
   return (

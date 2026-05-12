@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../services/api";
+import { api, type AnalyticsDTO } from "../services/api";
 import Skeleton from "../components/Skeleton";
 import StatCard from "../components/StatCard";
 import clsx from "clsx";
-import { CalendarDays, Download, Filter } from "lucide-react";
+import { CalendarDays, ChevronDown, Download, FileText, Filter } from "lucide-react";
 import Modal from "../components/Modal";
 import {
   buildSeries,
+  downloadAnalyticsPdf,
   downloadCsv,
   toDateInputValue,
   type AnalyticsTab,
@@ -37,14 +38,15 @@ function defaultRange(): DateRange {
 }
 
 export default function AnalyticsPage() {
-  const { data, isLoading, error } = useQuery({ queryKey: ["analytics"], queryFn: api.getAnalytics });
+  const { data, isLoading, error } = useQuery<AnalyticsDTO>({ queryKey: ["analytics"], queryFn: api.getAnalytics });
 
   const [tab, setTab] = useState<AnalyticsTab>("Daily");
   const [range, setRange] = useState<DateRange>(() => loadJson(LS_ANALYTICS_RANGE, defaultRange()));
   const [rangeDraft, setRangeDraft] = useState<DateRange>(range);
   const [rangeOpen, setRangeOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
-  const series = useMemo(() => buildSeries(tab, range), [tab, range]);
+  const series = useMemo(() => buildSeries(tab, range, data?.readings ?? []), [tab, range, data]);
 
   const kpis = useMemo(() => {
     // Recompute KPI numbers from generated series so it "works"
@@ -82,8 +84,33 @@ export default function AnalyticsPage() {
   }, [series, tab]);
 
   const exportCsv = () => {
+    if (!series.length) return;
     const rows = series.map((p) => ({ period: p.label, kwh: p.kwh, tab, from: range.from, to: range.to }));
     downloadCsv(`energy-analytics_${tab}_${range.from}_to_${range.to}.csv`, rows);
+    setExportOpen(false);
+  };
+
+  const exportPdf = async () => {
+    if (!data || !series.length) return;
+
+    await downloadAnalyticsPdf(`energy-analytics_${tab}_${range.from}_to_${range.to}.pdf`, {
+      headerDateText: data.headerDateText,
+      tab,
+      range,
+      series,
+      byRoom: data.byRoom,
+      byFloor: data.byFloor,
+      activity: data.activity,
+      detailedLog: data.detailedLog,
+    });
+    setExportOpen(false);
+  };
+
+  const exportBoth = async () => {
+    if (!data || !series.length) return;
+
+    exportCsv();
+    await exportPdf();
   };
 
   if (error) return <div className="text-sm text-red-600">Failed to load analytics.</div>;
@@ -97,7 +124,7 @@ export default function AnalyticsPage() {
           <div className="text-xs text-slate-500 mt-1">Detailed consumption analysis and insights</div>
         </div>
 
-        <div className="hidden sm:flex items-center gap-2">
+        <div className="hidden sm:flex items-center gap-2 relative">
           <button
             onClick={() => {
               setRangeDraft(range);
@@ -109,12 +136,39 @@ export default function AnalyticsPage() {
             Date Range
           </button>
           <button
-            onClick={exportCsv}
+            onClick={() => setExportOpen((value) => !value)}
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 text-white px-3 py-2 text-xs font-semibold shadow-lg shadow-blue-200/40 hover:bg-blue-700 transition"
           >
             <Download className="h-4 w-4" />
             Export
+            <ChevronDown className="h-4 w-4" />
           </button>
+
+          {exportOpen && series.length > 0 ? (
+            <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 w-60 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-xl shadow-slate-200/60">
+              <button
+                onClick={exportCsv}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <Download className="h-4 w-4 text-blue-600" />
+                Download CSV
+              </button>
+              <button
+                onClick={exportPdf}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <FileText className="h-4 w-4 text-emerald-600" />
+                Download PDF
+              </button>
+              <button
+                onClick={exportBoth}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <span className="flex h-4 w-4 items-center justify-center text-slate-400">+</span>
+                Download Both
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -192,6 +246,10 @@ export default function AnalyticsPage() {
         <div className="mt-4 h-[280px]">
           {isLoading ? (
             <Skeleton className="h-full" />
+          ) : !series.length ? (
+            <div className="h-full grid place-items-center text-xs text-slate-400">
+              No historical data in the selected range.
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={series} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
@@ -221,6 +279,10 @@ export default function AnalyticsPage() {
           <div className="mt-4 h-[260px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
+            ) : data.byRoom.length === 0 ? (
+              <div className="h-full grid place-items-center text-xs text-slate-400">
+                No room-level analytics yet.
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.byRoom} layout="vertical" margin={{ left: 20, right: 10, top: 10, bottom: 0 }}>
@@ -241,6 +303,10 @@ export default function AnalyticsPage() {
           <div className="mt-4 h-[260px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
+            ) : data.byFloor.length === 0 ? (
+              <div className="h-full grid place-items-center text-xs text-slate-400">
+                No floor-level analytics yet.
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.byFloor} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
@@ -264,6 +330,10 @@ export default function AnalyticsPage() {
           <div className="mt-4 h-[220px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
+            ) : data.activity.length === 0 ? (
+              <div className="h-full grid place-items-center text-xs text-slate-400">
+                No activity breakdown available yet.
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -286,6 +356,8 @@ export default function AnalyticsPage() {
                 <Skeleton className="h-8" />
                 <Skeleton className="h-8" />
               </>
+            ) : data.activity.length === 0 ? (
+              <div className="col-span-2 text-center text-[11px] text-slate-400 py-3">No legend data yet.</div>
             ) : (
               data.activity.map((a: any) => (
                 <div key={a.name} className="flex items-center justify-between text-[11px]">
@@ -306,6 +378,10 @@ export default function AnalyticsPage() {
           <div className="mt-4 overflow-x-auto">
             {isLoading || !data ? (
               <Skeleton className="h-[260px]" />
+            ) : data.detailedLog.length === 0 ? (
+              <div className="h-[260px] grid place-items-center text-xs text-slate-400">
+                No detailed log data yet.
+              </div>
             ) : (
               <table className="w-full min-w-[420px] text-[11px]">
                 <thead>

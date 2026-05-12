@@ -1,255 +1,178 @@
 # Energy Monitoring Frontend (React + TypeScript)
 
-## 📌 Overview
+## Overview
 
-Frontend ini merupakan dashboard **Energy Monitoring berbasis IoT** yang dibangun menggunakan **React + TypeScript**.
+This frontend is now connected to the Django backend API and no longer depends on mock data for the main pages.
 
-Tujuan utama frontend ini:
+Implemented integration goals:
 
-* Menyajikan data energi dalam tampilan yang rapi, jelas, dan mudah dipahami
-* Menampilkan modul utama: **Dashboard, Analytics, Forecast, Carbon, Alerts**
-* Menyediakan autentikasi sederhana untuk simulasi akses user
-* Menjadi UI foundation yang siap diintegrasikan ke backend API
+- Dynamic data for Dashboard, Analytics, Forecast, Carbon, and Alerts
+- JWT authentication against backend signin/signup endpoints
+- Automatic access-token refresh using refresh token
+- Error-safe API calls with fallbacks to keep UI usable
+- Lightweight toast notifications for async success/error actions
+- Alert status update and threshold settings save connected to backend
+- Environment-based API configuration via `.env`
 
-Frontend ini dirancang agar **frontend-friendly, scalable, dan mudah di-maintain** untuk pengembangan tahap berikutnya.
+## Tech Stack
 
----
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- React Router DOM
+- TanStack React Query
+- Recharts
 
-## 🧱 Tech Stack
-
-* React 19
-* TypeScript
-* Vite
-* Tailwind CSS
-* React Router DOM
-* TanStack React Query
-* Recharts
-* Axios
-
----
-
-## 📂 Struktur Project
+## Project Structure
 
 ```text
 energy-monitor-frontend/
-├── public/
+├── .env
+├── .env.example
 ├── src/
 │   ├── app/
-│   │   ├── queryClient.ts      # React Query config
-│   │   └── routes.tsx          # Route definitions
-│   ├── components/             # Reusable components
-│   ├── pages/                  # Main pages
-│   ├── services/               # API layer + mock runtime
-│   ├── index.css
-│   └── main.tsx
-├── index.html
-├── package.json
-└── README.md
+│   ├── components/
+│   ├── pages/
+│   ├── services/
+│   │   ├── backend.ts        # HTTP client + endpoint contracts + refresh-aware request layer
+│   │   ├── auth.ts           # Session storage + signin/signup/signout + profile sync
+│   │   ├── api.ts            # DTO mapping layer for all pages with safe fallbacks
+│   │   └── alertsRuntime.ts  # Alert resolve + thresholds local/backend sync
+│   └── ...
+└── package.json
 ```
 
----
+## Environment Variables
 
-## 🧭 Modul & Fitur
+Create `energy-monitor-frontend/.env`:
 
-### 1️⃣ Authentication (Simulasi)
-
-Halaman:
-
-* `/signin`
-* `/signup`
-
-Fitur:
-
-* Simulasi login/register via localStorage
-* Route protection dengan `RequireAuth`
-* Redirect ke dashboard setelah login berhasil
-
----
-
-### 2️⃣ Dashboard
-
-* KPI konsumsi energi dan karbon
-* Chart monitoring utama
-* Ringkasan insight operasional
-
----
-
-### 3️⃣ Energy Analytics
-
-* Analisis mode **Daily / Weekly / Monthly**
-* Date range filter
-* Export CSV
-* Tren historis konsumsi
-
----
-
-### 4️⃣ ML Predictions
-
-* Prediksi konsumsi energi 10 hari
-* Insight anomali penggunaan
-* Rekomendasi optimasi energi
-
----
-
-### 5️⃣ Carbon Footprint
-
-* Ringkasan metrik karbon
-* Chart tren emisi vs target
-* Rekomendasi offset karbon
-
----
-
-### 6️⃣ System Alerts
-
-* Daftar alert (`info`, `warning`, `critical`)
-* Filter berdasarkan severity/status
-* Resolve alert
-* Threshold settings disimpan di localStorage
-
----
-
-### 7️⃣ Profile
-
-* Informasi user aktif
-* Logout session
-
----
-
-## 🔄 Data Flow (Frontend)
-
-Sumber data saat ini:
-
-* **Mock DB** (`mockDb.ts`)
-* Akses via `api.ts` dan `mockServer.ts`
-
-State management:
-
-* Fetching & cache dengan **React Query**
-* Pengaturan query di `queryClient.ts`
-* Local persistence dengan localStorage (`store.ts`)
-
----
-
-## 🔌 API Base URL (Target Integrasi)
-
-```text
-http://localhost:8000/api/
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:8000/api
+VITE_API_TIMEOUT_MS=12000
+VITE_API_AUTH_PREFIX=/auth/auth
 ```
 
-Contoh endpoint yang akan dipakai frontend:
+Notes:
 
-* `/api/readings/`
-* `/api/carbon/`
-* `/api/alerts/`
-* `/api/predictions/`
+- `VITE_API_BASE_URL` is the backend API base.
+- `VITE_API_TIMEOUT_MS` controls request timeout in milliseconds.
+- `VITE_API_AUTH_PREFIX` depends on backend route structure.
+- Current backend swagger exposes auth endpoints under `/api/auth/auth/*`, so `/auth/auth` is the default.
 
----
+## Backend Endpoints Used
 
-## 📡 Integrasi Endpoint (Frontend Friendly)
+Based on current swagger (`http://127.0.0.1:8000/api/docs/`):
 
-### 🔹 Dashboard
+- Auth:
+  - `POST /api/auth/auth/signin/`
+  - `POST /api/auth/auth/signup/`
+  - `POST /api/auth/auth/token/refresh/`
+  - `GET /api/auth/auth/me/`
+  - `POST /api/auth/auth/signout/`
+- Core:
+  - `GET /api/core/buildings/`
+  - `GET /api/core/rooms/`
+  - `GET /api/core/devices/`
+  - `GET /api/core/threshold-rules/`
+  - `GET/PATCH /api/core/threshold-settings/current/`
+- Monitoring:
+  - `GET /api/monitoring/readings/`
+  - `GET /api/monitoring/carbon/`
+  - `GET/PATCH /api/monitoring/alerts/`
+  - `GET /api/monitoring/predictions/`
 
-* Ambil summary KPI + chart data untuk halaman dashboard
+## Auth and Token Refresh Flow
 
-### 🔹 Analytics
+Implemented in `src/services/auth.ts` + `src/services/backend.ts`:
 
-* Ambil data historis konsumsi energi berdasarkan rentang tanggal
+1. Sign in returns `access` + `refresh` tokens.
+2. Session is stored in localStorage/sessionStorage depending on Remember Me.
+3. Each API request sends `Authorization: Bearer <access>`.
+4. If request returns `401`, frontend automatically attempts refresh.
+5. On successful refresh, failed request is retried once.
+6. If refresh fails, session is cleared and app treats user as signed out.
 
-### 🔹 Forecast
+## Error Handling and Fallback Strategy
 
-* Ambil prediksi energi + confidence interval untuk visualisasi prediktif
+Implemented in the API layer:
 
-### 🔹 Carbon
+- Request timeout with safe error messages
+- JSON parse safety for non-JSON responses
+- Page DTO fallbacks when backend data fails
+- Partial-failure tolerance (for example, one endpoint failing does not crash full page)
 
-* Ambil metrik emisi karbon dan target reduction
+UI behavior:
 
-### 🔹 Alerts
+- Skeletons shown while loading
+- Empty states shown when lists/charts are empty
+- Action errors shown inline (alerts resolve / threshold update)
+- Toast notifications for auth, profile, and alerts actions
 
-* Ambil daftar alert
-* Update status alert sebagai resolved
+## Feature Coverage
 
----
+### Sign In / Sign Up
 
-## ▶️ Menjalankan Project
+- Connected to backend auth endpoints
+- Sign up supports username + name + email + password
+- Username/email supported in sign in input
+- Form fields are intentionally blank by default (no prefilled account)
 
-### Prasyarat
+### Profile
 
-* Node.js 18+
-* npm
+- Loads current user from backend `me` endpoint
+- Logout clears frontend session and calls backend signout when possible
 
-### Install dependency
+### Dashboard / Analytics / Forecast / Carbon / Alerts
+
+- Fully data-driven from backend API
+- Visualizations and cards recalculate from backend records
+
+### Alerts Actions
+
+- `Mark as Resolved` -> updates backend alert record
+- `Configure Alerts` -> saves local draft and also PATCHes backend threshold settings when numeric values are valid
+
+## Local Development
+
+From `energy-monitor-frontend`:
 
 ```bash
 npm install
-```
-
-### Development
-
-```bash
 npm run dev
 ```
 
-### Build
+Build validation:
 
 ```bash
 npm run build
 ```
 
-### Preview
+## Auth Troubleshooting
 
-```bash
-npm run preview
-```
+If Sign Up fails, check:
 
-### Lint
+1. Username is unique
+2. Email is unique
+3. Password is strong and at least 8 characters
+4. Password is not too common (Django password validation can reject common passwords)
 
-```bash
-npm run lint
-```
+If Sign In fails, check:
 
----
+1. You entered username/email and password correctly
+2. Backend server is running at the `.env` API URL
+3. `VITE_API_AUTH_PREFIX` matches backend auth routes
 
-## 🧪 Alur Testing yang Disarankan
+## Known Backend Gaps / Notes
 
-1. Jalankan frontend di mode development
-2. Login melalui Sign In
-3. Verifikasi data tampil di Dashboard, Analytics, Forecast, Carbon, Alerts
-4. Coba filter + resolve pada Alerts
-5. Coba export CSV pada Analytics
-6. Logout dan login ulang untuk cek persistence localStorage
+These are backend-side observations and were not modified by frontend changes:
 
----
+1. Auth route nesting is duplicated (`/api/auth/auth/*`) due include-path composition.
+2. Threshold settings serializer uses camelCase fields (`dailyUsageLimit`, `peakDemand`, etc.), which frontend follows.
+3. Frontend computes several aggregate analytics client-side from raw backend readings (no dedicated summary endpoint yet).
 
-## 🤝 Panduan Integrasi dengan Backend
+## Recommended Next Improvements
 
-Frontend **tidak perlu menghitung business logic backend** seperti:
-
-* Perhitungan karbon
-* Evaluasi threshold
-* Pembuatan alert otomatis
-
-Frontend cukup:
-
-* Fetch data API
-* Render data ke chart/card/table
-* Trigger aksi user (resolve alert, export, filter)
-
-Semua core logic tetap ada di backend.
-
----
-
-## 🚀 Roadmap Lanjutan
-
-* Integrasi backend API penuh
-* Realtime monitoring (WebSocket/SSE)
-* Authentication production (JWT)
-* Role-based access control
-* Unit test dan integration test
-
----
-
-## 👩‍💻 Author
-
-Frontend Developer: Regine Angelina Halim
-
-Project: Energy Monitoring System
+1. Add backend summary endpoints for dashboard KPIs and analytics aggregations to reduce client compute cost.
+2. Normalize auth URL structure to `/api/auth/*` for cleaner API surface.
+3. Add backend validation/error schema consistency for cleaner frontend message mapping.

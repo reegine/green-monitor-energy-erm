@@ -77,6 +77,10 @@ export default function DashboardPage() {
             <div className="mt-4 h-[260px]">
               {isLoading || !data ? (
                 <Skeleton className="h-full" />
+              ) : data.realtimeSeries.length === 0 ? (
+                <div className="h-full grid place-items-center text-xs text-slate-400">
+                  No real-time readings available yet.
+                </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={data.realtimeSeries} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
@@ -117,6 +121,10 @@ export default function DashboardPage() {
                   <Skeleton className="h-[92px]" />
                   <Skeleton className="h-[92px]" />
                 </>
+              ) : data.alertsPreview.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
+                  No alerts for now.
+                </div>
               ) : (
                 data.alertsPreview.map((a, idx) => (
                   <AlertCard key={idx} title={a.title} subtitle={a.subtitle} timeAgo={a.timeAgo} severity={a.severity} />

@@ -1,11 +1,11 @@
 import { NavLink } from "react-router-dom";
 import clsx from "clsx";
-import { BarChart3, Bell, BrainCircuit, Leaf, LayoutDashboard, User } from "lucide-react";
+import { BarChart3, Bell, Leaf, LayoutDashboard, User } from "lucide-react";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/analytics", label: "Energy Analytics", icon: BarChart3 },
-  { to: "/forecast", label: "ML Predictions", icon: BrainCircuit },
+  // { to: "/forecast", label: "ML Predictions", icon: BrainCircuit },
   { to: "/carbon", label: "Carbon Footprint", icon: Leaf },
   { to: "/alerts", label: "System Alerts", icon: Bell },
 ];
