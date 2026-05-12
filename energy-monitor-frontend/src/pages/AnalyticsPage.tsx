@@ -15,6 +15,10 @@ import {
   type DateRange,
 } from "../services/analyticsRuntime";
 import {
+  daysBetween,
+  parseDate,
+} from "../services/analyticsRuntime";
+import {
   CartesianGrid,
   Line,
   LineChart,
@@ -31,6 +35,115 @@ import {
 import { loadJson, saveJson } from "../services/store";
 
 const LS_ANALYTICS_RANGE = "em_analytics_range";
+type AnalyticsReading = AnalyticsDTO["readings"][number];
+type AnalyticsRoom = AnalyticsDTO["rooms"][number];
+type AnalyticsDevice = AnalyticsDTO["devices"][number];
+
+function toDateKey(value: string) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function readingValue(reading: Pick<AnalyticsReading, "energy_kwh" | "power_watt">) {
+  return reading.energy_kwh ?? (reading.power_watt ? reading.power_watt / 1000 : 0);
+}
+
+function floorLabel(room?: AnalyticsRoom) {
+  if (!room) return "Floor 1";
+  const nameMatch = room.name.match(/floor\s*(\d+)/i);
+  if (nameMatch?.[1]) return `Floor ${nameMatch[1]}`;
+  const codeMatch = room.code.match(/^(\d)/);
+  if (codeMatch?.[1]) return `Floor ${codeMatch[1]}`;
+  return room.floor ? `Floor ${room.floor}` : "Floor 1";
+}
+
+function buildLookups(rooms: AnalyticsRoom[], devices: AnalyticsDevice[]) {
+  const roomById = new Map(rooms.map((room) => [room.id, room]));
+  const deviceById = new Map(devices.map((device) => [device.id, device]));
+  return { roomById, deviceById };
+}
+
+function deviceMeta(deviceId: number, lookups: ReturnType<typeof buildLookups>) {
+  const device = lookups.deviceById.get(deviceId);
+  const room = device?.room ? lookups.roomById.get(device.room) : undefined;
+  return { device, room };
+}
+
+function filterReadings(readings: AnalyticsReading[], range: DateRange) {
+  return readings.filter((reading) => {
+    const key = toDateKey(reading.timestamp);
+    return key >= range.from && key <= range.to;
+  });
+}
+
+function buildRoomRows(readings: AnalyticsReading[], rooms: AnalyticsRoom[], devices: AnalyticsDevice[]) {
+  const lookups = buildLookups(rooms, devices);
+  const totals = new Map<string, number>();
+
+  for (const reading of readings) {
+    const meta = deviceMeta(reading.device, lookups);
+    const label = meta.room?.name ?? meta.device?.name ?? "Unassigned";
+    totals.set(label, (totals.get(label) ?? 0) + readingValue(reading));
+  }
+
+  return [...totals.entries()]
+    .map(([room, kwh]) => ({ room, kwh }))
+    .sort((a, b) => b.kwh - a.kwh)
+    .slice(0, 8);
+}
+
+function buildFloorRows(readings: AnalyticsReading[], rooms: AnalyticsRoom[], devices: AnalyticsDevice[]) {
+  const lookups = buildLookups(rooms, devices);
+  const totals = new Map<string, number>();
+
+  for (const reading of readings) {
+    const meta = deviceMeta(reading.device, lookups);
+    const label = floorLabel(meta.room);
+    totals.set(label, (totals.get(label) ?? 0) + readingValue(reading));
+  }
+
+  return [...totals.entries()]
+    .map(([floor, kwh]) => ({ floor, kwh }))
+    .sort((a, b) => b.kwh - a.kwh)
+    .slice(0, 6);
+}
+
+function buildActivityRows(readings: AnalyticsReading[], rooms: AnalyticsRoom[], devices: AnalyticsDevice[]) {
+  const lookups = buildLookups(rooms, devices);
+  const palette = ["#1d4ed8", "#d946ef", "#06b6d4", "#7c3aed", "#0f766e"];
+  const totals = new Map<string, number>();
+
+  for (const reading of readings) {
+    const meta = deviceMeta(reading.device, lookups);
+    const label = meta.device?.device_type
+      ? meta.device.device_type
+          .replace(/[_-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .replace(/\b\w/g, (match) => match.toUpperCase())
+      : "Other";
+    totals.set(label, (totals.get(label) ?? 0) + readingValue(reading));
+  }
+
+  return [...totals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, kwh], index) => ({ name, kwh: Math.round(kwh * 10) / 10, color: palette[index % palette.length] }));
+}
+
+function buildDetailedRows(
+  currentReadings: AnalyticsReading[],
+  previousReadings: AnalyticsReading[],
+  rooms: AnalyticsRoom[],
+  devices: AnalyticsDevice[]
+) {
+  const current = buildRoomRows(currentReadings, rooms, devices);
+  const compare = new Map(buildRoomRows(previousReadings, rooms, devices).map((row) => [row.room, row.kwh]));
+
+  return current.map((row) => {
+    const previous = compare.get(row.room) ?? row.kwh;
+    const delta = previous ? ((row.kwh - previous) / previous) * 100 : 0;
+    return { location: row.room, kwh: Math.round(row.kwh), trend: `${delta >= 0 ? "+" : ""}${Math.abs(delta).toFixed(0)}%` };
+  });
+}
 
 function defaultRange(): DateRange {
   // default range that matches the screenshots context around Feb 1, 2026
@@ -47,6 +160,30 @@ export default function AnalyticsPage() {
   const [exportOpen, setExportOpen] = useState(false);
 
   const series = useMemo(() => buildSeries(tab, range, data?.readings ?? []), [tab, range, data]);
+  const filteredReadings = useMemo(() => filterReadings(data?.readings ?? [], range), [data, range]);
+  const previousRange = useMemo(() => {
+    const from = parseDate(range.from);
+    const to = parseDate(range.to);
+    const spanDays = daysBetween(from, to) + 1;
+    const previousEnd = new Date(from);
+    previousEnd.setDate(previousEnd.getDate() - 1);
+    const previousStart = new Date(previousEnd);
+    previousStart.setDate(previousStart.getDate() - (spanDays - 1));
+    return { from: toDateInputValue(previousStart), to: toDateInputValue(previousEnd) };
+  }, [range]);
+  const previousReadings = useMemo(() => filterReadings(data?.readings ?? [], previousRange), [data, previousRange]);
+  const breakdowns = useMemo(() => {
+    if (!data) {
+      return { byRoom: [], byFloor: [], activity: [], detailedLog: [] };
+    }
+
+    return {
+      byRoom: buildRoomRows(filteredReadings, data.rooms, data.devices),
+      byFloor: buildFloorRows(filteredReadings, data.rooms, data.devices),
+      activity: buildActivityRows(filteredReadings, data.rooms, data.devices),
+      detailedLog: buildDetailedRows(filteredReadings, previousReadings, data.rooms, data.devices),
+    };
+  }, [data, filteredReadings, previousReadings]);
 
   const kpis = useMemo(() => {
     // Recompute KPI numbers from generated series so it "works"
@@ -98,10 +235,10 @@ export default function AnalyticsPage() {
       tab,
       range,
       series,
-      byRoom: data.byRoom,
-      byFloor: data.byFloor,
-      activity: data.activity,
-      detailedLog: data.detailedLog,
+      byRoom: breakdowns.byRoom,
+      byFloor: breakdowns.byFloor,
+      activity: breakdowns.activity,
+      detailedLog: breakdowns.detailedLog,
     });
     setExportOpen(false);
   };
@@ -187,6 +324,7 @@ export default function AnalyticsPage() {
               value={`${kpis.aValue.toLocaleString()} kWh`}
               sub={"↑ 12% vs yesterday"}
               subTone="up"
+              tooltip="Energy used in the selected date range, summarized for the current tab."
               icon={<div className="h-4 w-4 rounded bg-orange-500/20" />}
               iconBg="bg-orange-50"
             />
@@ -195,6 +333,7 @@ export default function AnalyticsPage() {
               value={`${kpis.bValue.toLocaleString()} kWh`}
               sub={"↑ 12% vs last week"}
               subTone="up"
+              tooltip="The same backend readings recalculated to match the selected daily, weekly, or monthly view."
               icon={<div className="h-4 w-4 rounded bg-orange-500/20" />}
               iconBg="bg-orange-50"
             />
@@ -203,6 +342,7 @@ export default function AnalyticsPage() {
               value={`${kpis.cValue.toLocaleString()} kWh`}
               sub={"↑ 12% vs last month"}
               subTone="up"
+              tooltip="The largest total in the current view, useful for comparing the overall load in the chosen range."
               icon={<div className="h-4 w-4 rounded bg-orange-500/20" />}
               iconBg="bg-orange-50"
             />
@@ -274,18 +414,21 @@ export default function AnalyticsPage() {
       {/* Two charts row (still uses mockDb, but they are real charts) */}
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div className="text-sm font-semibold">Energy Consumption by Room</div>
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+            <span>Energy Consumption by Room</span>
+            <span className="text-[11px] font-normal text-slate-400">for the selected date range</span>
+          </div>
 
           <div className="mt-4 h-[260px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
-            ) : data.byRoom.length === 0 ? (
+            ) : breakdowns.byRoom.length === 0 ? (
               <div className="h-full grid place-items-center text-xs text-slate-400">
-                No room-level analytics yet.
+                No room-level analytics for the selected range.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.byRoom} layout="vertical" margin={{ left: 20, right: 10, top: 10, bottom: 0 }}>
+                <BarChart data={breakdowns.byRoom} layout="vertical" margin={{ left: 20, right: 10, top: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" />
                   <XAxis type="number" tick={{ fontSize: 10, fill: "#94a3b8" }} />
                   <YAxis type="category" dataKey="room" tick={{ fontSize: 10, fill: "#94a3b8" }} width={120} />
@@ -298,18 +441,21 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div className="text-sm font-semibold">Energy Consumption by Floor</div>
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+            <span>Energy Consumption by Floor</span>
+            <span className="text-[11px] font-normal text-slate-400">for the selected date range</span>
+          </div>
 
           <div className="mt-4 h-[260px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
-            ) : data.byFloor.length === 0 ? (
+            ) : breakdowns.byFloor.length === 0 ? (
               <div className="h-full grid place-items-center text-xs text-slate-400">
-                No floor-level analytics yet.
+                No floor-level analytics for the selected range.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.byFloor} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
+                <BarChart data={breakdowns.byFloor} margin={{ left: 4, right: 10, top: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" />
                   <XAxis dataKey="floor" tick={{ fontSize: 10, fill: "#94a3b8" }} />
                   <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
@@ -325,20 +471,23 @@ export default function AnalyticsPage() {
       {/* Bottom row: pie + table */}
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div className="text-sm font-semibold">Consumption by Activity Type</div>
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+            <span>Consumption by Activity Type</span>
+            <span className="text-[11px] font-normal text-slate-400">for the selected date range</span>
+          </div>
 
           <div className="mt-4 h-[220px]">
             {isLoading || !data ? (
               <Skeleton className="h-full" />
-            ) : data.activity.length === 0 ? (
+            ) : breakdowns.activity.length === 0 ? (
               <div className="h-full grid place-items-center text-xs text-slate-400">
-                No activity breakdown available yet.
+                No activity breakdown for the selected range.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data.activity} dataKey="kwh" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={2}>
-                    {data.activity.map((a: any) => (
+                  <Pie data={breakdowns.activity} dataKey="kwh" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={2}>
+                    {breakdowns.activity.map((a: any) => (
                       <Cell key={a.name} fill={a.color} />
                     ))}
                   </Pie>
@@ -356,10 +505,10 @@ export default function AnalyticsPage() {
                 <Skeleton className="h-8" />
                 <Skeleton className="h-8" />
               </>
-            ) : data.activity.length === 0 ? (
+            ) : breakdowns.activity.length === 0 ? (
               <div className="col-span-2 text-center text-[11px] text-slate-400 py-3">No legend data yet.</div>
             ) : (
-              data.activity.map((a: any) => (
+              breakdowns.activity.map((a: any) => (
                 <div key={a.name} className="flex items-center justify-between text-[11px]">
                   <div className="flex items-center gap-2 text-slate-600">
                     <span className="h-2 w-2 rounded-full" style={{ background: a.color }} />
@@ -373,14 +522,17 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div className="text-sm font-semibold">Detailed Energy Log</div>
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+            <span>Detailed Energy Log</span>
+            <span className="text-[11px] font-normal text-slate-400">current range vs previous period</span>
+          </div>
 
           <div className="mt-4 overflow-x-auto">
             {isLoading || !data ? (
               <Skeleton className="h-[260px]" />
-            ) : data.detailedLog.length === 0 ? (
+            ) : breakdowns.detailedLog.length === 0 ? (
               <div className="h-[260px] grid place-items-center text-xs text-slate-400">
-                No detailed log data yet.
+                No detailed log data for the selected range.
               </div>
             ) : (
               <table className="w-full min-w-[420px] text-[11px]">
@@ -392,7 +544,7 @@ export default function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.detailedLog.map((row: any) => (
+                  {breakdowns.detailedLog.map((row: any) => (
                     <tr key={row.location} className="border-b border-slate-100">
                       <td className="py-3 text-slate-600">{row.location}</td>
                       <td className="py-3 text-right text-slate-700">{row.kwh.toLocaleString()}</td>

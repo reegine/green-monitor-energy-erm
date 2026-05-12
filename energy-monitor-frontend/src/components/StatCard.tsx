@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
+import InfoTooltip from "./InfoTooltip";
 
 export default function StatCard(props: {
   title: string;
@@ -8,6 +9,7 @@ export default function StatCard(props: {
   icon?: ReactNode;
   iconBg?: string;
   subTone?: "up" | "down" | "muted";
+  tooltip?: string;
 }) {
   const tone =
     props.subTone === "up"
@@ -20,7 +22,10 @@ export default function StatCard(props: {
     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs text-slate-400">{props.title}</div>
+          <div className="flex items-center gap-1.5 text-xs text-slate-400">
+            <span>{props.title}</span>
+            {props.tooltip ? <InfoTooltip label={`${props.title} help`} content={props.tooltip} /> : null}
+          </div>
           <div className="mt-2 text-2xl font-semibold tracking-tight">{props.value}</div>
           {props.sub ? <div className={clsx("mt-1 text-xs", tone)}>{props.sub}</div> : null}
         </div>
