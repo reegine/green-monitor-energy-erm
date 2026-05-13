@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { auth } from "../services/auth";
 import { useToast } from "../components/ToastProvider";
@@ -10,6 +10,16 @@ export default function SignUpPage() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [pwdChecks, setPwdChecks] = useState({
+    length: false,
+    categories: false,
+    noPersonal: true,
+    notCommon: true,
+    notSequential: true,
+    notPwned: true,
+  });
+  const [pwnedCount, setPwnedCount] = useState<number | null>(null);
+  const [checkingPwned, setCheckingPwned] = useState(false);
   const [remember, setRemember] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,6 +46,12 @@ export default function SignUpPage() {
       return;
     }
 
+    // final enforce: require password checks
+    if (!pwdChecks.length || !pwdChecks.categories || !pwdChecks.noPersonal || !pwdChecks.notCommon || !pwdChecks.notSequential || !pwdChecks.notPwned) {
+      setErr("Password does not meet the required strength or safety checks.");
+      return;
+    }
+
     setLoading(true);
     try {
       await auth.signUp({ name, username, email, password, remember });
@@ -49,6 +65,125 @@ export default function SignUpPage() {
       setLoading(false);
     }
   }
+
+  // ------------------ password validation helpers ------------------
+  function countCategories(pw: string) {
+    let count = 0;
+    if (/[a-z]/.test(pw)) count++;
+    if (/[A-Z]/.test(pw)) count++;
+    if (/\d/.test(pw)) count++;
+    if (/[^A-Za-z0-9]/.test(pw)) count++;
+    return count;
+  }
+
+  function isSequentialOrRepeating(s: string) {
+    if (!s) return false;
+    const normalized = s.toLowerCase();
+    // check repeating
+    const repeatMatch = /(.)\1{3,}/.test(normalized);
+    if (repeatMatch) return true;
+
+    // check sequential of length >=4
+    const seqLen = 4;
+    for (let i = 0; i <= normalized.length - seqLen; i++) {
+      let asc = true;
+      let desc = true;
+      for (let j = 0; j < seqLen - 1; j++) {
+        const a = normalized.charCodeAt(i + j);
+        const b = normalized.charCodeAt(i + j + 1);
+        if (b !== a + 1) asc = false;
+        if (b !== a - 1) desc = false;
+      }
+      if (asc || desc) return true;
+    }
+    return false;
+  }
+
+  const commonPasswords = new Set([
+    "123456",
+    "123456789",
+    "password",
+    "12345678",
+    "qwerty",
+    "1234567",
+    "111111",
+    "123123",
+    "abc123",
+    "password1",
+    "password123",
+    "1234",
+    "iloveyou",
+  ]);
+
+  async function sha1Hex(text: string) {
+    const enc = new TextEncoder();
+    const data = enc.encode(text);
+    const hash = await crypto.subtle.digest("SHA-1", data);
+    const arr = Array.from(new Uint8Array(hash));
+    return arr.map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+  }
+
+  async function checkPwned(passwordToCheck: string) {
+    try {
+      setCheckingPwned(true);
+      setPwnedCount(null);
+      const sha1 = await sha1Hex(passwordToCheck);
+      const prefix = sha1.slice(0, 5);
+      const suffix = sha1.slice(5);
+      const res = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`);
+      if (!res.ok) return true; // if API fails, be conservative and allow
+      const text = await res.text();
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const [hashSuffix, countStr] = line.split(":");
+        if (hashSuffix === suffix) {
+          const count = parseInt(countStr || "0", 10);
+          setPwnedCount(count);
+          return count === 0;
+        }
+      }
+      setPwnedCount(0);
+      return true;
+    } catch (e) {
+      // network/CORS issues - don't block sign-up on pwned check failure
+      return true;
+    } finally {
+      setCheckingPwned(false);
+    }
+  }
+
+  // debounce and run checks when password / related fields change
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      if (cancelled) return;
+      const lengthOk = password.length >= 8; // minimum enforced
+      const categoriesOk = countCategories(password) >= 3;
+      const containsPersonal = !!password && ((email && password.toLowerCase().includes(email.toLowerCase())) || (username && password.toLowerCase().includes(username.toLowerCase())) || (name && password.includes(name)));
+      const isCommon = commonPasswords.has(password.toLowerCase());
+      const isSeq = isSequentialOrRepeating(password);
+      let notPwned = true;
+      if (password.length > 0) {
+        try {
+          notPwned = await checkPwned(password);
+        } catch (_) {
+          notPwned = true;
+        }
+      }
+      setPwdChecks({
+        length: lengthOk,
+        categories: categoriesOk,
+        noPersonal: !containsPersonal,
+        notCommon: !isCommon,
+        notSequential: !isSeq,
+        notPwned: notPwned,
+      });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [password, email, username, name]);
 
   return (
     <div className="min-h-screen grid place-items-center px-4 bg-gradient-to-b from-sky-100 via-sky-50 to-slate-50">
@@ -139,6 +274,34 @@ export default function SignUpPage() {
               <div className="mt-2 text-[11px] text-slate-500">
                 Use a strong password (minimum 8 characters). Avoid common passwords.
               </div>
+              <ul className="mt-3 text-xs space-y-1 text-slate-600">
+                <li className="flex items-center gap-2">
+                  <span className={pwdChecks.length ? "text-green-600" : "text-slate-400"}>{pwdChecks.length ? "✔" : "●"}</span>
+                  <span>At least 8 characters (12+ recommended)</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className={pwdChecks.categories ? "text-green-600" : "text-slate-400"}>{pwdChecks.categories ? "✔" : "●"}</span>
+                  <span>Use at least 3 types: upper, lower, number, special</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className={pwdChecks.noPersonal ? "text-green-600" : "text-red-600"}>{pwdChecks.noPersonal ? "✔" : "✖"}</span>
+                  <span>Avoid your name, username, or email</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className={pwdChecks.notCommon ? "text-green-600" : "text-red-600"}>{pwdChecks.notCommon ? "✔" : "✖"}</span>
+                  <span>Avoid common passwords or simple patterns</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className={pwdChecks.notSequential ? "text-green-600" : "text-red-600"}>{pwdChecks.notSequential ? "✔" : "✖"}</span>
+                  <span>Avoid sequential or repeated characters</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className={pwdChecks.notPwned ? "text-green-600" : "text-red-600"}>{pwdChecks.notPwned ? "✔" : "✖"}</span>
+                  <span>
+                    {checkingPwned ? "Checking breaches..." : pwdChecks.notPwned ? (pwnedCount ? `Seen ${pwnedCount} times` : "Not found in breaches") : "Found in breaches"}
+                  </span>
+                </li>
+              </ul>
             </div>
 
             <button

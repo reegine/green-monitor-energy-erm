@@ -15,10 +15,17 @@ export default function SignInPage() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
+
+    if (lockoutUntil && Date.now() < lockoutUntil) {
+      setErr("Too many failed attempts. Try again later.");
+      return;
+    }
 
     if (!email.trim()) {
       setErr("Enter your username.");
@@ -32,12 +39,22 @@ export default function SignInPage() {
     setLoading(true);
     try {
       await auth.signIn(email, password, remember);
+      setFailedAttempts(0);
+      setLockoutUntil(null);
       toast.success("Welcome back. You are signed in.", "Sign In Success");
       nav(from, { replace: true });
     } catch (ex: unknown) {
-      const message = ex instanceof Error ? ex.message : "Failed to sign in";
-      setErr(message);
-      toast.error(message, "Sign In Failed");
+      const generic = "Invalid email or password";
+      setErr(generic);
+      toast.error(generic, "Sign In Failed");
+      setFailedAttempts((s) => {
+        const next = s + 1;
+        if (next >= 5) {
+          // lock out for 30 seconds
+          setLockoutUntil(Date.now() + 30 * 1000);
+        }
+        return next;
+      });
     } finally {
       setLoading(false);
     }
